@@ -1,0 +1,109 @@
+#!/bin/bash
+# Invoke Lambda function for troubleshooting
+# This action invokes the Lambda function with an optional payload
+
+echo "🔍 Invoking Lambda function..."
+
+# Validate required environment variables
+if [ -z "$LAMBDA_FUNCTION_NAME" ] || [ "$LAMBDA_FUNCTION_NAME" = "null" ]; then
+  echo "❌ LAMBDA_FUNCTION_NAME is required but not set" >&2
+  echo "💡 Possible causes:" >&2
+  echo "   - Scope metadata is missing or corrupted" >&2
+  echo "   - build_context step failed to resolve the function name" >&2
+  echo "🔧 How to fix:" >&2
+  echo "   - Verify the scope has a valid Lambda function associated" >&2
+  echo "   - Re-run the diagnose-scope action to check scope health" >&2
+  exit 1
+fi
+
+# Read main alias from NRN
+nrn_output=$(np nrn read --nrn "$SCOPE_NRN" --namespace aws --format json 2>&1 || echo "{}")
+LAMBDA_FUNCTION_MAIN_ALIAS=$(echo "$nrn_output" | jq -r '.LAMBDA_FUNCTION_MAIN_ALIAS // "main"')
+
+if [ -z "$LAMBDA_FUNCTION_MAIN_ALIAS" ] || [ "$LAMBDA_FUNCTION_MAIN_ALIAS" = "null" ]; then
+  LAMBDA_FUNCTION_MAIN_ALIAS="main"
+fi
+
+alias="$LAMBDA_FUNCTION_MAIN_ALIAS"
+
+# Read payload from CONTEXT
+payload=$(echo "$CONTEXT" | jq -r '.parameters.payload // "{}"')
+
+if [ -z "$payload" ] || [ "$payload" = "null" ]; then
+  payload="{}"
+fi
+
+payload_size=${#payload}
+
+echo "   📋 function_name=$LAMBDA_FUNCTION_NAME | alias=$alias | payload_size=$payload_size"
+echo ""
+
+# Ensure OUTPUT_DIR exists
+mkdir -p "$OUTPUT_DIR"
+
+# Invoke the Lambda function
+echo "   📡 Invoking ${LAMBDA_FUNCTION_NAME}:${alias}..."
+
+invoke_output=$(aws lambda invoke \
+  --function-name "${LAMBDA_FUNCTION_NAME}:${alias}" \
+  --payload "$payload" \
+  --cli-binary-format raw-in-base64-out \
+  "$OUTPUT_DIR/invoke_response.json" \
+  2>&1)
+invoke_exit_code=$?
+
+if [ $invoke_exit_code -ne 0 ]; then
+  echo "❌ Failed to invoke Lambda function '${LAMBDA_FUNCTION_NAME}:${alias}'" >&2
+  echo "💡 Possible causes:" >&2
+  echo "   - Function is not deployed yet" >&2
+  echo "   - Function timeout exceeded" >&2
+  echo "   - Function ran out of memory" >&2
+  echo "   - Permission denied (missing lambda:InvokeFunction)" >&2
+  echo "   - Alias '$alias' does not exist" >&2
+  echo "🔧 How to fix:" >&2
+  echo "   - Verify the function has been deployed at least once" >&2
+  echo "   - Check the function timeout and memory settings" >&2
+  echo "   - Verify the agent has lambda:InvokeFunction permission" >&2
+  echo "   - Run diagnose-scope to check the function health" >&2
+  echo "   - AWS error: $invoke_output" >&2
+  exit 1
+fi
+
+# Parse invoke output
+status_code=$(echo "$invoke_output" | jq -r '.StatusCode // "unknown"')
+function_error=$(echo "$invoke_output" | jq -r '.FunctionError // ""')
+
+echo "   📋 StatusCode=$status_code"
+
+if [ -n "$function_error" ] && [ "$function_error" != "" ] && [ "$function_error" != "null" ]; then
+  echo "   ⚠️  FunctionError=$function_error"
+fi
+
+# Show response body
+echo ""
+echo "   📋 Response body (first 1000 chars):"
+if [ -f "$OUTPUT_DIR/invoke_response.json" ]; then
+  response_body=$(cat "$OUTPUT_DIR/invoke_response.json" | head -c 1000)
+  echo "   $response_body"
+else
+  echo "   (no response body)"
+fi
+
+# Check for function error
+if [ -n "$function_error" ] && [ "$function_error" != "" ] && [ "$function_error" != "null" ]; then
+  echo "" >&2
+  echo "❌ Lambda function returned an error: $function_error" >&2
+  echo "💡 Possible causes:" >&2
+  echo "   - Unhandled exception in function code" >&2
+  echo "   - Function timeout exceeded" >&2
+  echo "   - Function ran out of memory" >&2
+  echo "   - Missing environment variables or permissions" >&2
+  echo "🔧 How to fix:" >&2
+  echo "   - Check the function logs in CloudWatch" >&2
+  echo "   - Review the error message in the response body above" >&2
+  echo "   - Verify function configuration (timeout, memory, env vars)" >&2
+  exit 1
+fi
+
+echo ""
+echo "✅ Lambda invoked successfully"

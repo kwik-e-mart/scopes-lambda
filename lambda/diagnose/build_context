@@ -1,0 +1,56 @@
+#!/bin/bash
+
+SCOPE_ID=$(echo "$CONTEXT" | jq -r '.scope.id')
+SCOPE_NRN=$(echo "$CONTEXT" | jq -r '.scope.nrn')
+
+if [ -z "$SCOPE_ID" ] || [ "$SCOPE_ID" = "null" ]; then
+   echo "❌ Failed to extract scope ID from CONTEXT" >&2
+   echo "💡 Possible causes:" >&2
+   echo "   - CONTEXT variable is empty or malformed" >&2
+   echo "   - scope.id field is missing from the context JSON" >&2
+   echo "🔧 How to fix:" >&2
+   echo "   - Verify the CONTEXT environment variable is set correctly" >&2
+   echo "   - Check that the scope exists in nullplatform" >&2
+   exit 1
+fi
+
+if [ -z "$SCOPE_NRN" ] || [ "$SCOPE_NRN" = "null" ]; then
+   echo "❌ Failed to extract scope NRN from CONTEXT" >&2
+   echo "💡 Possible causes:" >&2
+   echo "   - CONTEXT variable is missing scope.nrn field" >&2
+   echo "🔧 How to fix:" >&2
+   echo "   - Verify the scope has a valid NRN assigned" >&2
+   exit 1
+fi
+
+nrn_output=$(np nrn read --nrn "$SCOPE_NRN" --namespace aws --format json 2>&1 || echo "{}")
+LAMBDA_FUNCTION_NAME=$(echo "$nrn_output" | jq -r '.LAMBDA_FUNCTION_NAME // ""')
+LAMBDA_FUNCTION_ARN=$(echo "$nrn_output" | jq -r '.LAMBDA_FUNCTION_ARN // ""')
+LAMBDA_ROLE_ARN=$(echo "$nrn_output" | jq -r '.LAMBDA_ROLE_ARN // ""')
+SCOPE_DOMAIN=$(echo "$nrn_output" | jq -r '.SCOPE_DOMAIN // ""')
+
+if [ -z "$LAMBDA_FUNCTION_NAME" ]; then
+   echo "❌ Failed to read LAMBDA_FUNCTION_NAME from NRN" >&2
+   echo "💡 Possible causes:" >&2
+   echo "   - NRN namespace 'aws' does not contain LAMBDA_FUNCTION_NAME" >&2
+   echo "   - The scope has not been fully provisioned yet" >&2
+   echo "🔧 How to fix:" >&2
+   echo "   - Verify the scope was created successfully" >&2
+   echo "   - Check that the Lambda function was provisioned via Terraform" >&2
+   exit 1
+fi
+
+export SCOPE_ID
+export SCOPE_NRN
+export LAMBDA_FUNCTION_NAME
+export LAMBDA_FUNCTION_ARN
+export LAMBDA_ROLE_ARN
+export SCOPE_DOMAIN
+
+echo "Diagnose build_context completed"
+echo "   SCOPE_ID=$SCOPE_ID"
+echo "   SCOPE_NRN=$SCOPE_NRN"
+echo "   LAMBDA_FUNCTION_NAME=$LAMBDA_FUNCTION_NAME"
+echo "   LAMBDA_FUNCTION_ARN=$LAMBDA_FUNCTION_ARN"
+echo "   LAMBDA_ROLE_ARN=$LAMBDA_ROLE_ARN"
+echo "   SCOPE_DOMAIN=$SCOPE_DOMAIN"

@@ -1,0 +1,16 @@
+include:
+  - "$SERVICE_PATH/values.yaml"
+steps:
+  - name: build_context
+    type: script
+    file: "$SERVICE_PATH/log/build_context"
+    output:
+      - name: SCOPE_ID
+        type: environment
+      - name: LAMBDA_FUNCTION_NAME
+        type: environment
+      - name: LOG_GROUP_NAME
+        type: environment
+  - name: fetch_logs
+    type: script
+    file: "$SERVICE_PATH/log/fetch_logs"

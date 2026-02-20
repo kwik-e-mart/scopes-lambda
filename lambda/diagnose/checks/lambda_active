@@ -1,0 +1,38 @@
+#!/bin/bash
+# Check: Lambda function is active
+
+CHECK_NAME="Lambda Function Active"
+
+if [ -z "${LAMBDA_FUNCTION_NAME:-}" ]; then
+   echo "❌ Lambda function name not configured" >&2
+   echo "💡 Possible causes:" >&2
+   echo "   - build_context failed to resolve the function name" >&2
+   echo "   - LAMBDA_FUNCTION_NAME was not exported" >&2
+   echo "🔧 How to fix:" >&2
+   echo "   - Check that build_context ran successfully" >&2
+   echo "   - Verify the NRN contains LAMBDA_FUNCTION_NAME" >&2
+   exit 1
+fi
+
+config=$(aws lambda get-function-configuration \
+   --function-name "$LAMBDA_FUNCTION_NAME" \
+   2>&1 || echo "{}")
+
+state=$(echo "$config" | jq -r '.State // "Unknown"')
+last_update_status=$(echo "$config" | jq -r '.LastUpdateStatus // "Unknown"')
+
+if [ "$state" != "Active" ]; then
+   echo "❌ Lambda function '$LAMBDA_FUNCTION_NAME' state: $state (expected: Active)" >&2
+   echo "💡 Possible causes:" >&2
+   echo "   - A deployment is currently in progress (state: Pending)" >&2
+   echo "   - The function update failed (state: Failed)" >&2
+   echo "   - The function is being deleted (state: Inactive)" >&2
+   echo "🔧 How to fix:" >&2
+   echo "   - Wait for the current deployment to complete" >&2
+   echo "   - Check the last update status: $last_update_status" >&2
+   echo "   - Review CloudTrail for recent changes to the function" >&2
+   exit 1
+fi
+
+echo "   Lambda function is Active (last update: $last_update_status)"
+exit 0

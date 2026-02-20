@@ -1,0 +1,104 @@
+#!/bin/bash
+# List Lambda "instances" - shows concurrent executions and provisioned concurrency status
+# Lambda doesn't have persistent instances, but we can show concurrency metrics
+
+echo "Lambda Instance Information"
+echo ""
+
+if [ -z "${LAMBDA_FUNCTION_NAME:-}" ]; then
+   echo "❌ Lambda function name not available" >&2
+   echo "💡 Possible causes:" >&2
+   echo "   - build_context failed to resolve the function name" >&2
+   echo "   - LAMBDA_FUNCTION_NAME was not exported" >&2
+   echo "🔧 How to fix:" >&2
+   echo "   - Check that build_context ran successfully" >&2
+   echo "   - Verify the NRN contains LAMBDA_FUNCTION_NAME" >&2
+   exit 1
+fi
+
+echo "Function: $LAMBDA_FUNCTION_NAME"
+echo ""
+
+echo "Function Configuration:"
+config=$(aws lambda get-function-configuration \
+   --function-name "$LAMBDA_FUNCTION_NAME" \
+   2>&1 || echo "{}")
+
+if [ "$config" != "{}" ]; then
+   memory=$(echo "$config" | jq -r '.MemorySize // "N/A"')
+   timeout=$(echo "$config" | jq -r '.Timeout // "N/A"')
+   runtime=$(echo "$config" | jq -r '.Runtime // "N/A"')
+   state=$(echo "$config" | jq -r '.State // "N/A"')
+   reserved=$(echo "$config" | jq -r '.ReservedConcurrentExecutions // "Unreserved"')
+
+   echo "   Memory: ${memory}MB"
+   echo "   Timeout: ${timeout}s"
+   echo "   Runtime: $runtime"
+   echo "   State: $state"
+   echo "   Reserved Concurrency: $reserved"
+else
+   echo "❌ Failed to retrieve function configuration" >&2
+   echo "💡 Possible causes:" >&2
+   echo "   - Function '$LAMBDA_FUNCTION_NAME' does not exist" >&2
+   echo "   - AWS credentials lack lambda:GetFunctionConfiguration permission" >&2
+   echo "🔧 How to fix:" >&2
+   echo "   - Verify the function exists in the AWS account" >&2
+   echo "   - Check the agent IAM role permissions" >&2
+fi
+
+echo ""
+echo "Provisioned Concurrency:"
+
+alias_name="${LAMBDA_MAIN_ALIAS_NAME:-main}"
+pc_config=$(aws lambda get-provisioned-concurrency-config \
+   --function-name "$LAMBDA_FUNCTION_NAME" \
+   --qualifier "$alias_name" \
+   2>&1 || echo "NOT_CONFIGURED")
+
+if echo "$pc_config" | grep -q "ProvisionedConcurrencyConfigNotFoundException\|NOT_CONFIGURED"; then
+   echo "   Status: Not configured"
+else
+   status=$(echo "$pc_config" | jq -r '.Status // "N/A"')
+   requested=$(echo "$pc_config" | jq -r '.RequestedProvisionedConcurrentExecutions // 0')
+   allocated=$(echo "$pc_config" | jq -r '.AllocatedProvisionedConcurrentExecutions // 0')
+   available=$(echo "$pc_config" | jq -r '.AvailableProvisionedConcurrentExecutions // 0')
+
+   echo "   Status: $status"
+   echo "   Requested: $requested"
+   echo "   Allocated: $allocated"
+   echo "   Available: $available"
+fi
+
+echo ""
+echo "Recent Activity (last hour):"
+
+end_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+start_time=$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '1 hour ago' +%Y-%m-%dT%H:%M:%SZ)
+
+invocations=$(aws cloudwatch get-metric-statistics \
+   --namespace AWS/Lambda \
+   --metric-name Invocations \
+   --dimensions Name=FunctionName,Value="$LAMBDA_FUNCTION_NAME" \
+   --start-time "$start_time" \
+   --end-time "$end_time" \
+   --period 3600 \
+   --statistics Sum \
+   --query 'Datapoints[0].Sum' \
+   --output text 2>/dev/null || echo "N/A")
+
+concurrent=$(aws cloudwatch get-metric-statistics \
+   --namespace AWS/Lambda \
+   --metric-name ConcurrentExecutions \
+   --dimensions Name=FunctionName,Value="$LAMBDA_FUNCTION_NAME" \
+   --start-time "$start_time" \
+   --end-time "$end_time" \
+   --period 3600 \
+   --statistics Maximum \
+   --query 'Datapoints[0].Maximum' \
+   --output text 2>/dev/null || echo "N/A")
+
+echo "   Invocations: $invocations"
+echo "   Max Concurrent: $concurrent"
+
+echo ""
+echo "Instance list complete for $LAMBDA_FUNCTION_NAME"

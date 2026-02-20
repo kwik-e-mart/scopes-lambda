@@ -1,0 +1,58 @@
+include:
+  - "$SERVICE_PATH/values.yaml"
+steps:
+  - name: build_context
+    type: script
+    file: "$SERVICE_PATH/scope/build_context"
+    output:
+      - name: SCOPE_ID
+        type: environment
+      - name: SCOPE_SLUG
+        type: environment
+      - name: SCOPE_NRN
+        type: environment
+      - name: NAMESPACE_SLUG
+        type: environment
+      - name: APPLICATION_SLUG
+        type: environment
+      - name: ACCOUNT_SLUG
+        type: environment
+      - name: LAMBDA_FUNCTION_NAME
+        type: environment
+      - name: VISIBILITY
+        type: environment
+      - name: PACKAGE_TYPE
+        type: environment
+      - name: RUNTIME
+        type: environment
+      - name: HANDLER
+        type: environment
+      - name: ARCHITECTURE
+        type: environment
+      - name: OUTPUT_DIR
+        type: environment
+      - name: RESOURCE_TAGS_JSON
+        type: environment
+  - name: create_iam_role
+    type: script
+    file: "$SERVICE_PATH/scope/scripts/create_iam_role"
+    output:
+      - name: LAMBDA_ROLE_ARN
+        type: environment
+      - name: LAMBDA_ROLE_NAME
+        type: environment
+  - name: create_placeholder_lambda
+    type: script
+    file: "$SERVICE_PATH/scope/scripts/create_placeholder_lambda"
+    output:
+      - name: LAMBDA_FUNCTION_ARN
+        type: environment
+  - name: generate_domain
+    type: script
+    file: "$SERVICE_PATH/scope/scripts/generate_domain"
+    output:
+      - name: SCOPE_DOMAIN
+        type: environment
+  - name: store_scope_metadata
+    type: script
+    file: "$SERVICE_PATH/scope/scripts/store_scope_metadata"

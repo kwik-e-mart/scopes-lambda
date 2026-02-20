@@ -1,0 +1,30 @@
+include:
+  - "$SERVICE_PATH/values.yaml"
+steps:
+  - name: build_context
+    type: script
+    file: "$SERVICE_PATH/deployment/build_context"
+    output:
+      - name: SCOPE_ID
+        type: environment
+      - name: DEPLOYMENT_ID
+        type: environment
+      - name: SCOPE_NRN
+        type: environment
+      - name: LAMBDA_FUNCTION_NAME
+        type: environment
+      - name: LAMBDA_MAIN_ALIAS_NAME
+        type: environment
+      - name: BLUE_DEPLOYMENT_ID
+        type: environment
+      - name: LAMBDA_ROLE_ARN
+        type: environment
+  - name: restore_alias
+    type: script
+    file: "$SERVICE_PATH/deployment/scripts/rollback_alias"
+  - name: rollback_iam
+    type: script
+    file: "$SERVICE_PATH/deployment/scripts/rollback_iam_policies"
+  - name: cleanup_new_version
+    type: script
+    file: "$SERVICE_PATH/deployment/scripts/cleanup_new_version"

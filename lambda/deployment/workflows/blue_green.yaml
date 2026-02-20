@@ -1,0 +1,6 @@
+include:
+  - "$SERVICE_PATH/deployment/workflows/initial.yaml"
+configuration:
+  DEPLOYMENT_STRATEGY: "blue_green"
+  # Blue-green specific: don't fully switch traffic initially
+  SKIP_FULL_TRAFFIC_SWITCH: true

@@ -1,0 +1,53 @@
+#!/bin/bash
+# Check: IAM execution role is valid
+
+CHECK_NAME="IAM Role Valid"
+
+if [ -z "${LAMBDA_FUNCTION_NAME:-}" ]; then
+   echo "❌ Lambda function name not configured" >&2
+   echo "💡 Possible causes:" >&2
+   echo "   - build_context failed to resolve the function name" >&2
+   echo "   - LAMBDA_FUNCTION_NAME was not exported" >&2
+   echo "🔧 How to fix:" >&2
+   echo "   - Check that build_context ran successfully" >&2
+   echo "   - Verify the NRN contains LAMBDA_FUNCTION_NAME" >&2
+   exit 1
+fi
+
+# Get the role ARN from the function configuration
+config=$(aws lambda get-function-configuration \
+   --function-name "$LAMBDA_FUNCTION_NAME" \
+   2>&1 || echo "{}")
+
+role_arn=$(echo "$config" | jq -r '.Role // ""')
+
+if [ -z "$role_arn" ] || [ "$role_arn" = "null" ]; then
+   echo "❌ No IAM role configured for Lambda function '$LAMBDA_FUNCTION_NAME'" >&2
+   echo "💡 Possible causes:" >&2
+   echo "   - Function configuration could not be retrieved" >&2
+   echo "   - The function was created without an execution role" >&2
+   echo "🔧 How to fix:" >&2
+   echo "   - Verify the function exists and has a valid execution role" >&2
+   echo "   - Check the Terraform configuration for the IAM role" >&2
+   exit 1
+fi
+
+# Extract role name from ARN
+role_name=$(echo "$role_arn" | sed 's/.*role\///')
+
+# Check if role exists
+role_check=$(aws iam get-role --role-name "$role_name" 2>&1 || echo "NOT_FOUND")
+
+if echo "$role_check" | grep -q "NoSuchEntity\|NOT_FOUND"; then
+   echo "❌ IAM role '$role_name' does not exist" >&2
+   echo "💡 Possible causes:" >&2
+   echo "   - The IAM role was deleted outside of Terraform" >&2
+   echo "   - The role ARN references a different AWS account" >&2
+   echo "🔧 How to fix:" >&2
+   echo "   - Re-run Terraform to recreate the IAM role" >&2
+   echo "   - Verify the correct AWS account is being used" >&2
+   exit 1
+fi
+
+echo "   IAM role is valid: $role_name"
+exit 0

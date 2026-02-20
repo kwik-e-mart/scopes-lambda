@@ -1,0 +1,14 @@
+include:
+  - "$SERVICE_PATH/values.yaml"
+steps:
+  - name: build_context
+    type: script
+    file: "$SERVICE_PATH/metric/build_context"
+    output:
+      - name: SCOPE_ID
+        type: environment
+      - name: LAMBDA_FUNCTION_NAME
+        type: environment
+  - name: fetch_metric
+    type: script
+    file: "$SERVICE_PATH/metric/fetch_metric"

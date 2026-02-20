@@ -1,0 +1,167 @@
+#!/bin/bash
+# Update Lambda alias with weighted routing for traffic switching
+# Supports gradual traffic shift between versions
+
+echo "📝 Switching traffic for Lambda alias..."
+
+if [ -z "${LAMBDA_FUNCTION_NAME:-}" ]; then
+  echo "❌ LAMBDA_FUNCTION_NAME is required" >&2
+  echo "💡 Possible causes:" >&2
+  echo "   - Environment variable not set by the deployment pipeline" >&2
+  echo "   - Scope context missing Lambda function configuration" >&2
+  echo "🔧 How to fix:" >&2
+  echo "   - Ensure the scope has a valid Lambda function configured" >&2
+  echo "   - Check that LAMBDA_FUNCTION_NAME is exported before this script runs" >&2
+  exit 1
+fi
+
+if [ -z "${DESIRED_TRAFFIC:-}" ]; then
+  echo "❌ DESIRED_TRAFFIC is required" >&2
+  echo "💡 Possible causes:" >&2
+  echo "   - Traffic percentage not specified by the deployment strategy" >&2
+  echo "   - Deployment step misconfigured" >&2
+  echo "🔧 How to fix:" >&2
+  echo "   - Ensure DESIRED_TRAFFIC is set (integer 0-100)" >&2
+  echo "   - Check the deployment strategy configuration" >&2
+  exit 1
+fi
+
+alias_name="${LAMBDA_MAIN_ALIAS_NAME:-main}"
+new_version="${LAMBDA_NEW_VERSION:-$LAMBDA_CURRENT_VERSION}"
+traffic_percentage="$DESIRED_TRAFFIC"
+
+if [ -z "$new_version" ]; then
+  echo "❌ No version specified - both LAMBDA_NEW_VERSION and LAMBDA_CURRENT_VERSION are empty" >&2
+  echo "💡 Possible causes:" >&2
+  echo "   - Deployment did not publish a new Lambda version" >&2
+  echo "   - NRN metadata is missing version information" >&2
+  echo "🔧 How to fix:" >&2
+  echo "   - Ensure the build step publishes a new Lambda version" >&2
+  echo "   - Check that LAMBDA_NEW_VERSION or LAMBDA_CURRENT_VERSION is set" >&2
+  exit 1
+fi
+
+echo "   ✅ function_name=$LAMBDA_FUNCTION_NAME"
+echo "   ✅ alias=$alias_name"
+echo "   ✅ new_version=$new_version"
+echo "   ✅ traffic_percentage=$traffic_percentage%"
+
+if [ "$traffic_percentage" -lt 0 ] || [ "$traffic_percentage" -gt 100 ]; then
+  echo "❌ Traffic percentage must be between 0 and 100, got $traffic_percentage" >&2
+  echo "💡 Possible causes:" >&2
+  echo "   - Invalid DESIRED_TRAFFIC value: $traffic_percentage" >&2
+  echo "🔧 How to fix:" >&2
+  echo "   - Set DESIRED_TRAFFIC to an integer between 0 and 100" >&2
+  exit 1
+fi
+
+echo ""
+echo "   📡 Getting current alias configuration for $alias_name on function $LAMBDA_FUNCTION_NAME..."
+
+alias_config=$(aws lambda get-alias \
+  --function-name "$LAMBDA_FUNCTION_NAME" \
+  --name "$alias_name" \
+  2>&1)
+alias_exit_code=$?
+
+if [ $alias_exit_code -ne 0 ]; then
+  echo "❌ Failed to get alias $alias_name configuration on function $LAMBDA_FUNCTION_NAME" >&2
+  echo "💡 Possible causes:" >&2
+  echo "   - Alias $alias_name does not exist on function $LAMBDA_FUNCTION_NAME" >&2
+  echo "   - Insufficient Lambda permissions" >&2
+  echo "🔧 How to fix:" >&2
+  echo "   - Verify alias exists: aws lambda get-alias --function-name $LAMBDA_FUNCTION_NAME --name $alias_name" >&2
+  echo "   - Check the agent's IAM permissions include lambda:GetAlias" >&2
+  echo "   📋 Error: $alias_config" >&2
+  exit 1
+fi
+
+current_version=$(echo "$alias_config" | jq -r '.FunctionVersion')
+echo "   ✅ current_version=$current_version"
+
+if [ "$traffic_percentage" -eq 100 ]; then
+  echo ""
+  echo "   📝 Switching 100% traffic to version $new_version on alias $alias_name..."
+
+  update_output=$(aws lambda update-alias \
+    --function-name "$LAMBDA_FUNCTION_NAME" \
+    --name "$alias_name" \
+    --function-version "$new_version" \
+    --routing-config '{}' 2>&1)
+  update_exit_code=$?
+
+  if [ $update_exit_code -ne 0 ]; then
+    echo "❌ Failed to switch 100% traffic to version $new_version on alias $alias_name" >&2
+    echo "💡 Possible causes:" >&2
+    echo "   - Version $new_version does not exist on function $LAMBDA_FUNCTION_NAME" >&2
+    echo "   - Insufficient Lambda permissions" >&2
+    echo "🔧 How to fix:" >&2
+    echo "   - Check if version exists: aws lambda get-function --function-name $LAMBDA_FUNCTION_NAME --qualifier $new_version" >&2
+    echo "   📋 Error: $update_output" >&2
+    exit 1
+  fi
+
+  echo "   ✅ Traffic switched to 100% on version $new_version"
+else
+  weight=$(echo "scale=2; $traffic_percentage / 100" | bc)
+
+  echo ""
+  echo "   📝 Configuring weighted routing on alias $alias_name..."
+  echo "   📋 Version $current_version: $((100 - traffic_percentage))%"
+  echo "   📋 Version $new_version: $traffic_percentage%"
+
+  routing_config=$(jq -n \
+    --arg version "$new_version" \
+    --arg weight "$weight" \
+    '{AdditionalVersionWeights: {($version): ($weight | tonumber)}}')
+
+  update_output=$(aws lambda update-alias \
+    --function-name "$LAMBDA_FUNCTION_NAME" \
+    --name "$alias_name" \
+    --function-version "$current_version" \
+    --routing-config "$routing_config" 2>&1)
+  update_exit_code=$?
+
+  if [ $update_exit_code -ne 0 ]; then
+    echo "❌ Failed to configure weighted routing on alias $alias_name (${traffic_percentage}% to version $new_version)" >&2
+    echo "💡 Possible causes:" >&2
+    echo "   - Version $new_version or $current_version does not exist" >&2
+    echo "   - Invalid routing configuration" >&2
+    echo "   - Insufficient Lambda permissions" >&2
+    echo "🔧 How to fix:" >&2
+    echo "   - Verify both versions exist on function $LAMBDA_FUNCTION_NAME" >&2
+    echo "   - Check the agent's IAM permissions include lambda:UpdateAlias" >&2
+    echo "   📋 Error: $update_output" >&2
+    exit 1
+  fi
+
+  echo "   ✅ Weighted routing configured: $current_version=$((100 - traffic_percentage))%, $new_version=$traffic_percentage%"
+fi
+
+if [ -n "${WARMUP_ALIAS_NAME:-}" ]; then
+  echo ""
+  echo "   📝 Updating warm alias $WARMUP_ALIAS_NAME to point to version $new_version..."
+
+  warm_output=$(aws lambda update-alias \
+    --function-name "$LAMBDA_FUNCTION_NAME" \
+    --name "$WARMUP_ALIAS_NAME" \
+    --function-version "$new_version" \
+    --routing-config '{}' 2>&1)
+  warm_exit_code=$?
+
+  if [ $warm_exit_code -ne 0 ]; then
+    echo "❌ Failed to update warm alias $WARMUP_ALIAS_NAME to version $new_version on function $LAMBDA_FUNCTION_NAME" >&2
+    echo "💡 Possible causes:" >&2
+    echo "   - Warm alias $WARMUP_ALIAS_NAME does not exist on function $LAMBDA_FUNCTION_NAME" >&2
+    echo "   - Version $new_version does not exist" >&2
+    echo "🔧 How to fix:" >&2
+    echo "   - Verify warm alias exists: aws lambda get-alias --function-name $LAMBDA_FUNCTION_NAME --name $WARMUP_ALIAS_NAME" >&2
+    echo "   📋 Error: $warm_output" >&2
+    exit 1
+  fi
+
+  echo "   ✅ Warm alias $WARMUP_ALIAS_NAME updated to version $new_version"
+fi
+
+echo ""
+echo "✨ Traffic switch completed successfully for function=$LAMBDA_FUNCTION_NAME alias=$alias_name traffic=$traffic_percentage%"

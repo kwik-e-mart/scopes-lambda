@@ -1,0 +1,30 @@
+#!/bin/bash
+# Check: DNS record resolves (if domain configured)
+
+CHECK_NAME="DNS Resolution"
+
+if [ -z "${SCOPE_DOMAIN:-}" ] || [ "$SCOPE_DOMAIN" = "null" ]; then
+   echo "   No domain configured, skipping DNS check"
+   exit 0
+fi
+
+echo "   Checking domain: $SCOPE_DOMAIN"
+
+# Try to resolve the domain
+dns_result=$(dig +short "$SCOPE_DOMAIN" 2>/dev/null || echo "")
+
+if [ -z "$dns_result" ]; then
+   echo "❌ Domain '$SCOPE_DOMAIN' does not resolve" >&2
+   echo "💡 Possible causes:" >&2
+   echo "   - DNS record has not been created yet" >&2
+   echo "   - DNS propagation is still in progress" >&2
+   echo "   - The domain name is incorrect" >&2
+   echo "🔧 How to fix:" >&2
+   echo "   - Wait a few minutes for DNS propagation" >&2
+   echo "   - Verify the Route53 record exists for '$SCOPE_DOMAIN'" >&2
+   echo "   - Check that the hosted zone is correctly configured" >&2
+   exit 1
+fi
+
+echo "   Domain resolves to: $dns_result"
+exit 0

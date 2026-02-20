@@ -1,0 +1,30 @@
+include:
+  - "$SERVICE_PATH/values.yaml"
+steps:
+  - name: build_context
+    type: script
+    file: "$SERVICE_PATH/deployment/build_context"
+    output:
+      - name: SCOPE_ID
+        type: environment
+      - name: DEPLOYMENT_ID
+        type: environment
+      - name: SCOPE_NRN
+        type: environment
+      - name: LAMBDA_FUNCTION_NAME
+        type: environment
+      - name: LAMBDA_MAIN_ALIAS_NAME
+        type: environment
+      - name: LAMBDA_CURRENT_VERSION
+        type: environment
+      - name: BLUE_DEPLOYMENT_ID
+        type: environment
+  - name: finalize_traffic
+    type: script
+    file: "$SERVICE_PATH/deployment/scripts/update_alias_full"
+  - name: cleanup_old_version
+    type: script
+    file: "$SERVICE_PATH/deployment/scripts/cleanup_old_version"
+  - name: store_metadata
+    type: script
+    file: "$SERVICE_PATH/deployment/scripts/store_nrn_metadata"

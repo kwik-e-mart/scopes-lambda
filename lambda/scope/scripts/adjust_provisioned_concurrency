@@ -1,0 +1,119 @@
+#!/bin/bash
+# Adjust provisioned concurrency for Lambda function
+# This action sets or removes provisioned concurrent executions
+
+echo "🔍 Adjusting provisioned concurrency for Lambda function..."
+
+# Validate required environment variables
+if [ -z "$LAMBDA_FUNCTION_NAME" ] || [ "$LAMBDA_FUNCTION_NAME" = "null" ]; then
+  echo "❌ LAMBDA_FUNCTION_NAME is required but not set" >&2
+  echo "💡 Possible causes:" >&2
+  echo "   - Scope metadata is missing or corrupted" >&2
+  echo "   - build_context step failed to resolve the function name" >&2
+  echo "🔧 How to fix:" >&2
+  echo "   - Verify the scope has a valid Lambda function associated" >&2
+  echo "   - Re-run the diagnose-scope action to check scope health" >&2
+  exit 1
+fi
+
+# Read value from CONTEXT
+value=$(echo "$CONTEXT" | jq -r '.parameters.value // ""')
+
+if [ -z "$value" ] || [ "$value" = "null" ]; then
+  echo "❌ 'value' parameter is required but not provided" >&2
+  echo "💡 Possible causes:" >&2
+  echo "   - The action was invoked without specifying a value" >&2
+  echo "🔧 How to fix:" >&2
+  echo "   - Provide a 'value' parameter (integer >= 0)" >&2
+  echo "   - Use 0 to remove the provisioned concurrency configuration" >&2
+  exit 1
+fi
+
+# Validate value is a number
+if ! [[ "$value" =~ ^[0-9]+$ ]]; then
+  echo "❌ 'value' must be a non-negative integer, got: $value" >&2
+  echo "💡 Possible causes:" >&2
+  echo "   - A non-numeric value was provided" >&2
+  echo "🔧 How to fix:" >&2
+  echo "   - Provide an integer >= 0 for the 'value' parameter" >&2
+  exit 1
+fi
+
+# Read current provisioned concurrency and alias from NRN
+nrn_output=$(np nrn read --nrn "$SCOPE_NRN" --namespace aws --format json 2>&1 || echo "{}")
+current_value=$(echo "$nrn_output" | jq -r '.LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_VALUE // "not set"')
+alias=$(echo "$nrn_output" | jq -r '.LAMBDA_FUNCTION_MAIN_ALIAS // "main"')
+
+if [ -z "$alias" ] || [ "$alias" = "null" ]; then
+  alias="main"
+fi
+
+echo "   📋 function_name=$LAMBDA_FUNCTION_NAME"
+echo "   📋 alias=$alias"
+echo "   📋 current_provisioned_concurrency=$current_value"
+echo "   📋 new_provisioned_concurrency=$value"
+echo ""
+
+if [ "$value" -eq 0 ]; then
+  # Remove provisioned concurrency configuration
+  echo "   📡 Removing provisioned concurrency configuration..."
+  aws_output=$(aws lambda delete-provisioned-concurrency-config \
+    --function-name "$LAMBDA_FUNCTION_NAME" \
+    --qualifier "$alias" \
+    2>&1)
+  aws_exit_code=$?
+
+  if [ $aws_exit_code -ne 0 ]; then
+    echo "❌ Failed to remove provisioned concurrency for '${LAMBDA_FUNCTION_NAME}:${alias}'" >&2
+    echo "💡 Possible causes:" >&2
+    echo "   - Function or alias does not exist" >&2
+    echo "   - Permission denied (missing lambda:DeleteProvisionedConcurrencyConfig)" >&2
+    echo "   - No provisioned concurrency was configured for this alias" >&2
+    echo "🔧 How to fix:" >&2
+    echo "   - Verify the function and alias exist" >&2
+    echo "   - Verify the agent has proper permissions" >&2
+    echo "   - Run diagnose-scope to check the function health" >&2
+    echo "   - AWS error: $aws_output" >&2
+    exit 1
+  fi
+
+  # Update NRN metadata
+  np nrn write --nrn "$SCOPE_NRN" --namespace aws --key LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_VALUE --value "0"
+  np nrn write --nrn "$SCOPE_NRN" --namespace aws --key LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_TYPE --value "unprovisioned"
+
+  echo ""
+  echo "✅ Provisioned concurrency configuration removed successfully"
+else
+  # Set provisioned concurrency
+  echo "   📡 Setting provisioned concurrency to $value on alias '$alias'..."
+  aws_output=$(aws lambda put-provisioned-concurrency-config \
+    --function-name "$LAMBDA_FUNCTION_NAME" \
+    --qualifier "$alias" \
+    --provisioned-concurrent-executions "$value" \
+    2>&1)
+  aws_exit_code=$?
+
+  if [ $aws_exit_code -ne 0 ]; then
+    echo "❌ Failed to set provisioned concurrency for '${LAMBDA_FUNCTION_NAME}:${alias}'" >&2
+    echo "💡 Possible causes:" >&2
+    echo "   - Function or alias does not exist" >&2
+    echo "   - Permission denied (missing lambda:PutProvisionedConcurrencyConfig)" >&2
+    echo "   - Value exceeds account concurrency limit" >&2
+    echo "   - Alias does not point to a published version (required for provisioned concurrency)" >&2
+    echo "   - Another provisioned concurrency update is in progress" >&2
+    echo "🔧 How to fix:" >&2
+    echo "   - Verify the function and alias exist and point to a published version" >&2
+    echo "   - Check the account's total concurrency limit and current reservations" >&2
+    echo "   - Wait for any in-progress provisioned concurrency updates to complete" >&2
+    echo "   - Try a lower value" >&2
+    echo "   - AWS error: $aws_output" >&2
+    exit 1
+  fi
+
+  # Update NRN metadata
+  np nrn write --nrn "$SCOPE_NRN" --namespace aws --key LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_VALUE --value "$value"
+  np nrn write --nrn "$SCOPE_NRN" --namespace aws --key LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_TYPE --value "provisioned"
+
+  echo ""
+  echo "✅ Provisioned concurrency set to $value on alias '$alias' successfully"
+fi

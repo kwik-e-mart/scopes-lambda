@@ -1,0 +1,55 @@
+#!/bin/bash
+# Fetch Lambda metrics from CloudWatch
+
+if [ -z "${LAMBDA_FUNCTION_NAME:-}" ]; then
+   echo "❌ Lambda function name not available" >&2
+   echo "💡 Possible causes:" >&2
+   echo "   - build_context failed to resolve the function name" >&2
+   echo "   - LAMBDA_FUNCTION_NAME was not exported" >&2
+   echo "🔧 How to fix:" >&2
+   echo "   - Check that build_context ran successfully" >&2
+   echo "   - Verify the NRN contains LAMBDA_FUNCTION_NAME" >&2
+   exit 1
+fi
+
+# Get metric parameters from context
+metric_name="${METRIC_NAME:-Invocations}"
+period="${METRIC_PERIOD:-300}"
+statistic="${METRIC_STATISTIC:-Sum}"
+
+# Calculate time range (default: last hour)
+end_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+start_time=$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '1 hour ago' +%Y-%m-%dT%H:%M:%SZ)
+
+echo "Fetching metric: $metric_name"
+echo "   Function: $LAMBDA_FUNCTION_NAME"
+echo "   Period: ${period}s"
+echo "   Statistic: $statistic"
+echo "   Time range: $start_time to $end_time"
+echo ""
+
+# Fetch metric
+result=$(aws cloudwatch get-metric-statistics \
+   --namespace AWS/Lambda \
+   --metric-name "$metric_name" \
+   --dimensions Name=FunctionName,Value="$LAMBDA_FUNCTION_NAME" \
+   --start-time "$start_time" \
+   --end-time "$end_time" \
+   --period "$period" \
+   --statistics "$statistic" \
+   --query 'Datapoints[*]' \
+   --output table 2>&1)
+
+if [ $? -ne 0 ]; then
+   echo "❌ Failed to fetch metric '$metric_name' from CloudWatch" >&2
+   echo "💡 Possible causes:" >&2
+   echo "   - Invalid metric name '$metric_name'" >&2
+   echo "   - AWS credentials lack cloudwatch:GetMetricStatistics permission" >&2
+   echo "   - Function '$LAMBDA_FUNCTION_NAME' has no data for this metric" >&2
+   echo "🔧 How to fix:" >&2
+   echo "   - Verify the metric name is valid (use list_metrics to see options)" >&2
+   echo "   - Check the agent IAM role permissions" >&2
+   exit 1
+fi
+
+echo "$result"

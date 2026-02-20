@@ -1,0 +1,26 @@
+include:
+  - "$SERVICE_PATH/values.yaml"
+steps:
+  - name: build_context
+    type: script
+    file: "$SERVICE_PATH/scope/build_context"
+    output:
+      - name: SCOPE_ID
+        type: environment
+      - name: SCOPE_SLUG
+        type: environment
+      - name: SCOPE_NRN
+        type: environment
+      - name: NAMESPACE_SLUG
+        type: environment
+      - name: APPLICATION_SLUG
+        type: environment
+      - name: ACCOUNT_SLUG
+        type: environment
+      - name: LAMBDA_FUNCTION_NAME
+        type: environment
+      - name: OUTPUT_DIR
+        type: environment
+  - name: adjust_provisioned_concurrency
+    type: script
+    file: "$SERVICE_PATH/scope/scripts/adjust_provisioned_concurrency"

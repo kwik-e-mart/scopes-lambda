@@ -1,0 +1,97 @@
+#!/bin/bash
+# Merge IAM policies for a new deployment
+# This script adds deployment-specific policies to an existing role
+
+echo "📝 Merging IAM policies for deployment..."
+
+if [ -z "${LAMBDA_ROLE_NAME:-}" ]; then
+  echo "❌ LAMBDA_ROLE_NAME is required" >&2
+  echo "💡 Possible causes:" >&2
+  echo "   - Environment variable not set by the deployment pipeline" >&2
+  echo "   - Lambda execution role was not created during scope provisioning" >&2
+  echo "🔧 How to fix:" >&2
+  echo "   - Verify the scope has a valid IAM role configured" >&2
+  echo "   - Check that LAMBDA_ROLE_NAME is exported before this script runs" >&2
+  exit 1
+fi
+
+if [ -z "${DEPLOYMENT_ID:-}" ]; then
+  echo "❌ DEPLOYMENT_ID is required" >&2
+  echo "💡 Possible causes:" >&2
+  echo "   - Deployment context not properly initialized" >&2
+  echo "   - Script invoked outside of a deployment pipeline" >&2
+  echo "🔧 How to fix:" >&2
+  echo "   - Ensure this script is called from within a nullplatform deployment flow" >&2
+  echo "   - Check that DEPLOYMENT_ID is set in the environment" >&2
+  exit 1
+fi
+
+if [ -z "${SCOPE_NRN:-}" ]; then
+  echo "❌ SCOPE_NRN is required" >&2
+  echo "💡 Possible causes:" >&2
+  echo "   - Scope context not available in the environment" >&2
+  echo "   - NRN not passed from the deployment pipeline" >&2
+  echo "🔧 How to fix:" >&2
+  echo "   - Verify SCOPE_NRN is exported before this script runs" >&2
+  echo "   - Check the deployment agent configuration" >&2
+  exit 1
+fi
+
+echo "   ✅ role_name=$LAMBDA_ROLE_NAME"
+echo "   ✅ deployment_id=$DEPLOYMENT_ID"
+
+deployment_nrn="${SCOPE_NRN}:deployment=${DEPLOYMENT_ID}"
+echo "   📡 Reading deployment policies from NRN=$deployment_nrn..."
+
+nrn_output=$(np nrn read --nrn "$deployment_nrn" --namespace aws --format json 2>&1 || echo "{}")
+policies=$(echo "$nrn_output" | jq -r '.AWS_LAMBDA_DEDICATED_ROLE_POLICIES // "[]"')
+
+if [ "$policies" = "[]" ] || [ "$policies" = "null" ]; then
+  echo "   ⏭️  No deployment-specific policies to merge"
+  exit 0
+fi
+
+policy_count=$(echo "$policies" | jq length)
+echo "   📋 Found $policy_count policies to merge for role=$LAMBDA_ROLE_NAME"
+
+for i in $(seq 0 $((policy_count - 1))); do
+  policy_name=$(echo "$policies" | jq -r ".[$i].name")
+  policy_document=$(echo "$policies" | jq -r ".[$i].policy")
+
+  full_policy_name="${policy_name}-${DEPLOYMENT_ID}"
+
+  echo "   📝 Attaching policy: $full_policy_name to role=$LAMBDA_ROLE_NAME"
+
+  attach_output=$(aws iam put-role-policy \
+    --role-name "$LAMBDA_ROLE_NAME" \
+    --policy-name "$full_policy_name" \
+    --policy-document "$policy_document" 2>&1)
+  attach_exit_code=$?
+
+  if [ $attach_exit_code -ne 0 ]; then
+    echo "❌ Failed to attach policy $full_policy_name to role $LAMBDA_ROLE_NAME" >&2
+    echo "💡 Possible causes:" >&2
+    echo "   - IAM role $LAMBDA_ROLE_NAME does not exist" >&2
+    echo "   - Policy document is malformed" >&2
+    echo "   - Insufficient IAM permissions to modify role" >&2
+    echo "🔧 How to fix:" >&2
+    echo "   - Verify the role exists: aws iam get-role --role-name $LAMBDA_ROLE_NAME" >&2
+    echo "   - Validate the policy document JSON" >&2
+    echo "   - Check the agent's IAM permissions include iam:PutRolePolicy" >&2
+    echo "   📋 Error: $attach_output" >&2
+    exit 1
+  fi
+
+  echo "   ✅ Policy $full_policy_name attached successfully"
+done
+
+echo ""
+echo "   📝 Storing policies in deployment NRN=$deployment_nrn..."
+np nrn write \
+  --nrn "$deployment_nrn" \
+  --namespace aws \
+  --body "{\"AWS_LAMBDA_MERGED_POLICIES\": $policies}" \
+  --format json >/dev/null 2>&1 || true
+
+echo ""
+echo "✨ IAM policies merged successfully for role=$LAMBDA_ROLE_NAME deployment=$DEPLOYMENT_ID"

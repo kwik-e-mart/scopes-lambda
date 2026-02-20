@@ -1,0 +1,35 @@
+#!/bin/bash
+# Check: Lambda function exists
+
+CHECK_NAME="Lambda Function Exists"
+
+if [ -z "${LAMBDA_FUNCTION_NAME:-}" ]; then
+   echo "❌ Lambda function name not configured" >&2
+   echo "💡 Possible causes:" >&2
+   echo "   - build_context failed to resolve the function name" >&2
+   echo "   - LAMBDA_FUNCTION_NAME was not exported" >&2
+   echo "🔧 How to fix:" >&2
+   echo "   - Check that build_context ran successfully" >&2
+   echo "   - Verify the NRN contains LAMBDA_FUNCTION_NAME" >&2
+   exit 1
+fi
+
+result=$(aws lambda get-function \
+   --function-name "$LAMBDA_FUNCTION_NAME" \
+   2>&1 || echo "NOT_FOUND")
+
+if echo "$result" | grep -q "ResourceNotFoundException\|NOT_FOUND"; then
+   echo "❌ Lambda function '$LAMBDA_FUNCTION_NAME' does not exist" >&2
+   echo "💡 Possible causes:" >&2
+   echo "   - The function was deleted outside of Terraform" >&2
+   echo "   - The scope provisioning did not complete successfully" >&2
+   echo "   - The function name in the NRN is incorrect" >&2
+   echo "🔧 How to fix:" >&2
+   echo "   - Re-run the scope provisioning workflow" >&2
+   echo "   - Verify the function name '$LAMBDA_FUNCTION_NAME' in the AWS console" >&2
+   echo "   - Check Terraform state for drift" >&2
+   exit 1
+fi
+
+echo "   Lambda function exists: $LAMBDA_FUNCTION_NAME"
+exit 0

@@ -1,0 +1,56 @@
+#!/bin/bash
+# Check: Provisioned concurrency status (if configured)
+
+CHECK_NAME="Provisioned Concurrency"
+
+if [ -z "${LAMBDA_FUNCTION_NAME:-}" ]; then
+   echo "❌ Lambda function name not configured" >&2
+   echo "💡 Possible causes:" >&2
+   echo "   - build_context failed to resolve the function name" >&2
+   echo "   - LAMBDA_FUNCTION_NAME was not exported" >&2
+   echo "🔧 How to fix:" >&2
+   echo "   - Check that build_context ran successfully" >&2
+   echo "   - Verify the NRN contains LAMBDA_FUNCTION_NAME" >&2
+   exit 1
+fi
+
+alias_name="${LAMBDA_MAIN_ALIAS_NAME:-main}"
+
+# Check if provisioned concurrency is configured
+pc_config=$(aws lambda get-provisioned-concurrency-config \
+   --function-name "$LAMBDA_FUNCTION_NAME" \
+   --qualifier "$alias_name" \
+   2>&1 || echo "NOT_CONFIGURED")
+
+if echo "$pc_config" | grep -q "ProvisionedConcurrencyConfigNotFoundException\|NOT_CONFIGURED"; then
+   echo "   Provisioned concurrency not configured for $LAMBDA_FUNCTION_NAME (alias: $alias_name)"
+   exit 0
+fi
+
+status=$(echo "$pc_config" | jq -r '.Status // "Unknown"')
+requested=$(echo "$pc_config" | jq -r '.RequestedProvisionedConcurrentExecutions // 0')
+allocated=$(echo "$pc_config" | jq -r '.AllocatedProvisionedConcurrentExecutions // 0')
+
+if [ "$status" != "READY" ]; then
+   echo "❌ Provisioned concurrency status: $status (expected: READY)" >&2
+   echo "💡 Possible causes:" >&2
+   echo "   - Provisioned concurrency is still being allocated (status: IN_PROGRESS)" >&2
+   echo "   - Allocation failed (status: FAILED)" >&2
+   echo "   - Requested: $requested, Allocated: $allocated" >&2
+   echo "🔧 How to fix:" >&2
+   echo "   - Wait for allocation to complete if status is IN_PROGRESS" >&2
+   echo "   - Check CloudWatch logs for allocation errors if FAILED" >&2
+   echo "   - Re-apply Terraform to retry provisioned concurrency setup" >&2
+   if [ "$status" = "FAILED" ]; then
+      exit 1
+   fi
+   exit 0
+fi
+
+if [ "$allocated" -lt "$requested" ]; then
+   echo "   Provisioned concurrency partially allocated: $allocated / $requested"
+   exit 0
+fi
+
+echo "   Provisioned concurrency ready: $allocated instances (alias: $alias_name)"
+exit 0

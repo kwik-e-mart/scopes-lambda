@@ -1,0 +1,22 @@
+include:
+  - "$SERVICE_PATH/values.yaml"
+steps:
+  - name: build_context
+    type: script
+    file: "$SERVICE_PATH/scope/build_context"
+    output:
+      - name: SCOPE_ID
+        type: environment
+      - name: SCOPE_NRN
+        type: environment
+      - name: LAMBDA_FUNCTION_NAME
+        type: environment
+  - name: delete_lambda
+    type: script
+    file: "$SERVICE_PATH/scope/scripts/delete_lambda"
+  - name: delete_iam_role
+    type: script
+    file: "$SERVICE_PATH/scope/scripts/delete_iam_role"
+  - name: cleanup_nrn
+    type: script
+    file: "$SERVICE_PATH/scope/scripts/cleanup_nrn"

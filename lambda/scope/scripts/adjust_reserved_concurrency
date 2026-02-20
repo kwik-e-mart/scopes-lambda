@@ -1,0 +1,108 @@
+#!/bin/bash
+# Adjust reserved concurrency for Lambda function
+# This action sets or removes reserved concurrent executions
+
+echo "🔍 Adjusting reserved concurrency for Lambda function..."
+
+# Validate required environment variables
+if [ -z "$LAMBDA_FUNCTION_NAME" ] || [ "$LAMBDA_FUNCTION_NAME" = "null" ]; then
+  echo "❌ LAMBDA_FUNCTION_NAME is required but not set" >&2
+  echo "💡 Possible causes:" >&2
+  echo "   - Scope metadata is missing or corrupted" >&2
+  echo "   - build_context step failed to resolve the function name" >&2
+  echo "🔧 How to fix:" >&2
+  echo "   - Verify the scope has a valid Lambda function associated" >&2
+  echo "   - Re-run the diagnose-scope action to check scope health" >&2
+  exit 1
+fi
+
+# Read value from CONTEXT
+value=$(echo "$CONTEXT" | jq -r '.parameters.value // ""')
+
+if [ -z "$value" ] || [ "$value" = "null" ]; then
+  echo "❌ 'value' parameter is required but not provided" >&2
+  echo "💡 Possible causes:" >&2
+  echo "   - The action was invoked without specifying a value" >&2
+  echo "🔧 How to fix:" >&2
+  echo "   - Provide a 'value' parameter (integer >= 0)" >&2
+  echo "   - Use 0 to remove the reserved concurrency reservation" >&2
+  exit 1
+fi
+
+# Validate value is a number
+if ! [[ "$value" =~ ^[0-9]+$ ]]; then
+  echo "❌ 'value' must be a non-negative integer, got: $value" >&2
+  echo "💡 Possible causes:" >&2
+  echo "   - A non-numeric value was provided" >&2
+  echo "🔧 How to fix:" >&2
+  echo "   - Provide an integer >= 0 for the 'value' parameter" >&2
+  exit 1
+fi
+
+# Read current reserved concurrency from NRN
+nrn_output=$(np nrn read --nrn "$SCOPE_NRN" --namespace aws --format json 2>&1 || echo "{}")
+current_value=$(echo "$nrn_output" | jq -r '.LAMBDA_CURRENT_RESERVED_CONCURRENCY_VALUE // "not set"')
+
+echo "   📋 function_name=$LAMBDA_FUNCTION_NAME"
+echo "   📋 current_reserved_concurrency=$current_value"
+echo "   📋 new_reserved_concurrency=$value"
+echo ""
+
+if [ "$value" -eq 0 ]; then
+  # Remove reserved concurrency reservation
+  echo "   📡 Removing reserved concurrency reservation..."
+  aws_output=$(aws lambda delete-function-concurrency \
+    --function-name "$LAMBDA_FUNCTION_NAME" \
+    2>&1)
+  aws_exit_code=$?
+
+  if [ $aws_exit_code -ne 0 ]; then
+    echo "❌ Failed to remove reserved concurrency for '${LAMBDA_FUNCTION_NAME}'" >&2
+    echo "💡 Possible causes:" >&2
+    echo "   - Function does not exist" >&2
+    echo "   - Permission denied (missing lambda:DeleteFunctionConcurrency)" >&2
+    echo "   - No reserved concurrency was configured" >&2
+    echo "🔧 How to fix:" >&2
+    echo "   - Verify the function exists and the agent has proper permissions" >&2
+    echo "   - Run diagnose-scope to check the function health" >&2
+    echo "   - AWS error: $aws_output" >&2
+    exit 1
+  fi
+
+  # Update NRN metadata
+  np nrn write --nrn "$SCOPE_NRN" --namespace aws --key LAMBDA_CURRENT_RESERVED_CONCURRENCY_VALUE --value "0"
+  np nrn write --nrn "$SCOPE_NRN" --namespace aws --key LAMBDA_CURRENT_RESERVED_CONCURRENCY_TYPE --value "unreserved"
+
+  echo ""
+  echo "✅ Reserved concurrency reservation removed successfully"
+else
+  # Set reserved concurrency
+  echo "   📡 Setting reserved concurrency to $value..."
+  aws_output=$(aws lambda put-function-concurrency \
+    --function-name "$LAMBDA_FUNCTION_NAME" \
+    --reserved-concurrent-executions "$value" \
+    2>&1)
+  aws_exit_code=$?
+
+  if [ $aws_exit_code -ne 0 ]; then
+    echo "❌ Failed to set reserved concurrency for '${LAMBDA_FUNCTION_NAME}'" >&2
+    echo "💡 Possible causes:" >&2
+    echo "   - Function does not exist" >&2
+    echo "   - Permission denied (missing lambda:PutFunctionConcurrency)" >&2
+    echo "   - Value exceeds account concurrency limit" >&2
+    echo "   - Insufficient unreserved concurrency in the account" >&2
+    echo "🔧 How to fix:" >&2
+    echo "   - Verify the function exists and the agent has proper permissions" >&2
+    echo "   - Check the account's total concurrency limit and current reservations" >&2
+    echo "   - Try a lower value" >&2
+    echo "   - AWS error: $aws_output" >&2
+    exit 1
+  fi
+
+  # Update NRN metadata
+  np nrn write --nrn "$SCOPE_NRN" --namespace aws --key LAMBDA_CURRENT_RESERVED_CONCURRENCY_VALUE --value "$value"
+  np nrn write --nrn "$SCOPE_NRN" --namespace aws --key LAMBDA_CURRENT_RESERVED_CONCURRENCY_TYPE --value "reserved"
+
+  echo ""
+  echo "✅ Reserved concurrency set to $value successfully"
+fi

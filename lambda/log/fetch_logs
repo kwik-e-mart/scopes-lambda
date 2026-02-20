@@ -1,0 +1,67 @@
+#!/bin/bash
+# Fetch Lambda logs from CloudWatch
+
+if [ -z "${LOG_GROUP_NAME:-}" ]; then
+   echo "❌ Log group name not available" >&2
+   echo "💡 Possible causes:" >&2
+   echo "   - build_context failed to resolve the Lambda function name" >&2
+   echo "   - LOG_GROUP_NAME was not exported by build_context" >&2
+   echo "🔧 How to fix:" >&2
+   echo "   - Check that build_context ran successfully" >&2
+   echo "   - Verify the NRN contains LAMBDA_FUNCTION_NAME" >&2
+   exit 1
+fi
+
+# Get log parameters from context or defaults
+start_time="${LOG_START_TIME:-}"
+end_time="${LOG_END_TIME:-}"
+limit="${LOG_LIMIT:-100}"
+filter="${LOG_FILTER:-}"
+
+# Calculate default time range (last 1 hour)
+if [ -z "$end_time" ]; then
+   end_time=$(date +%s)000
+fi
+
+if [ -z "$start_time" ]; then
+   start_time=$(( $(date +%s) - 3600 ))000
+fi
+
+echo "Fetching logs from: $LOG_GROUP_NAME"
+echo "   Time range: $start_time - $end_time"
+echo "   Limit: $limit"
+if [ -n "$filter" ]; then
+   echo "   Filter: $filter"
+fi
+echo ""
+
+# Build filter pattern argument
+filter_arg=""
+if [ -n "$filter" ]; then
+   filter_arg="--filter-pattern \"$filter\""
+fi
+
+# Fetch logs
+result=$(aws logs filter-log-events \
+   --log-group-name "$LOG_GROUP_NAME" \
+   --start-time "$start_time" \
+   --end-time "$end_time" \
+   --limit "$limit" \
+   ${filter_arg} \
+   --query 'events[].{timestamp:timestamp,message:message}' \
+   --output table 2>&1)
+
+if [ $? -ne 0 ]; then
+   echo "❌ Failed to fetch logs from CloudWatch" >&2
+   echo "💡 Possible causes:" >&2
+   echo "   - Log group '$LOG_GROUP_NAME' does not exist" >&2
+   echo "   - AWS credentials lack logs:FilterLogEvents permission" >&2
+   echo "   - The Lambda function has not been invoked yet" >&2
+   echo "🔧 How to fix:" >&2
+   echo "   - Verify the log group exists in CloudWatch" >&2
+   echo "   - Check the agent IAM role permissions" >&2
+   echo "   - Invoke the Lambda function to generate logs" >&2
+   exit 1
+fi
+
+echo "$result"

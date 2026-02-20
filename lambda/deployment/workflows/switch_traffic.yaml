@@ -1,0 +1,24 @@
+include:
+  - "$SERVICE_PATH/values.yaml"
+steps:
+  - name: build_context
+    type: script
+    file: "$SERVICE_PATH/deployment/build_context"
+    output:
+      - name: SCOPE_ID
+        type: environment
+      - name: DEPLOYMENT_ID
+        type: environment
+      - name: SCOPE_NRN
+        type: environment
+      - name: LAMBDA_FUNCTION_NAME
+        type: environment
+      - name: DESIRED_TRAFFIC
+        type: environment
+      - name: LAMBDA_MAIN_ALIAS_NAME
+        type: environment
+      - name: LAMBDA_CURRENT_VERSION
+        type: environment
+  - name: switch_traffic
+    type: script
+    file: "$SERVICE_PATH/deployment/scripts/update_alias_weights"

@@ -1,0 +1,173 @@
+#!/bin/bash
+
+# Source utility functions
+source "$SERVICE_PATH/utils/get_config_value"
+
+echo "🔍 Building scope context..."
+
+#Validate CONTEXT is available
+if [ -z "${CONTEXT:-}" ]; then
+  echo "❌ CONTEXT variable is not set or empty" >&2
+  echo "" >&2
+  echo "💡 Possible causes:" >&2
+  echo "   The agent was invoked without the required CONTEXT payload" >&2
+  echo "" >&2
+  echo "🔧 How to fix:" >&2
+  echo "   • Ensure the scope event includes a valid CONTEXT JSON" >&2
+  echo "   • Verify the agent trigger is passing CONTEXT correctly" >&2
+  exit 1
+fi
+
+#Extract scope information from context
+SCOPE_ID=$(echo "$CONTEXT" | jq -r '.scope.id')
+SCOPE_SLUG=$(echo "$CONTEXT" | jq -r '.scope.slug')
+SCOPE_NRN=$(echo "$CONTEXT" | jq -r '.scope.nrn')
+
+if [ -z "$SCOPE_ID" ] || [ "$SCOPE_ID" = "null" ]; then
+  echo "❌ Failed to extract scope ID from CONTEXT" >&2
+  echo "" >&2
+  echo "💡 Possible causes:" >&2
+  echo "   The CONTEXT JSON is malformed or missing .scope.id" >&2
+  echo "" >&2
+  echo "🔧 How to fix:" >&2
+  echo "   • Inspect the CONTEXT payload: echo \"\$CONTEXT\" | jq '.scope'" >&2
+  echo "   • Ensure the scope was created correctly in nullplatform" >&2
+  exit 1
+fi
+
+echo "   ✅ scope_id=$SCOPE_ID"
+
+#Extract slugs for naming
+NAMESPACE_SLUG=$(echo "$CONTEXT" | jq -r '.namespace.slug')
+APPLICATION_SLUG=$(echo "$CONTEXT" | jq -r '.application.slug')
+ACCOUNT_SLUG=$(echo "$CONTEXT" | jq -r '.account.slug')
+
+echo "   ✅ namespace=$NAMESPACE_SLUG"
+echo "   ✅ application=$APPLICATION_SLUG"
+echo "   ✅ scope=$SCOPE_SLUG"
+
+#Generate Lambda function name (max 64 chars)
+LAMBDA_FUNCTION_NAME="${NAMESPACE_SLUG}-${APPLICATION_SLUG}-${SCOPE_SLUG}-${SCOPE_ID}"
+LAMBDA_FUNCTION_NAME="${LAMBDA_FUNCTION_NAME:0:64}"
+echo "   ✅ function_name=$LAMBDA_FUNCTION_NAME"
+
+#Visibility
+VISIBILITY=$(echo "$CONTEXT" | jq -r '.scope.visibility // "public"')
+echo "   ✅ visibility=$VISIBILITY"
+
+#Lambda capabilities (runtime, handler, architecture)
+RUNTIME=$(get_config_value \
+  --provider '.scope.capabilities.runtime' \
+  --env LAMBDA_RUNTIME \
+  --default "nodejs20.x"
+)
+
+HANDLER=$(get_config_value \
+  --provider '.scope.capabilities.handler' \
+  --env LAMBDA_HANDLER \
+  --default "index.handler"
+)
+
+ARCHITECTURE=$(get_config_value \
+  --provider '.scope.capabilities.architecture' \
+  --env LAMBDA_ARCHITECTURE \
+  --default "arm64"
+)
+
+# Determine package type from capabilities
+# If the scope has no runtime specified and is meant for container images,
+# the asset type at deployment time will determine the actual package type
+PACKAGE_TYPE=$(echo "$CONTEXT" | jq -r '.scope.capabilities.package_type // "Zip"')
+
+echo "   ✅ package_type=$PACKAGE_TYPE"
+echo "   ✅ runtime=$RUNTIME"
+echo "   ✅ handler=$HANDLER"
+echo "   ✅ architecture=$ARCHITECTURE"
+
+#ALB listener rule capacity validation (private scopes use internal ALB)
+if [ "$VISIBILITY" = "private" ]; then
+  ALB_LISTENER_RULE_CAPACITY=$(get_config_value \
+    --provider '.providers["scope-configurations"].networking.alb_listener_rule_capacity' \
+    --env ALB_LISTENER_RULE_CAPACITY \
+    --default "100"
+  )
+
+  ALB_LISTENER_RULE_ALERT_THRESHOLD=$(get_config_value \
+    --provider '.providers["scope-configurations"].networking.alb_listener_rule_alert_threshold' \
+    --env ALB_LISTENER_RULE_ALERT_THRESHOLD \
+    --default "80"
+  )
+
+  echo "   ✅ alb_listener_rule_capacity=$ALB_LISTENER_RULE_CAPACITY"
+  echo "   ✅ alb_listener_rule_alert_threshold=$ALB_LISTENER_RULE_ALERT_THRESHOLD"
+
+  if [ "$ALB_LISTENER_RULE_CAPACITY" -le "$ALB_LISTENER_RULE_ALERT_THRESHOLD" ] 2>/dev/null; then
+    echo "❌ ALB listener rule capacity ($ALB_LISTENER_RULE_CAPACITY) is at or below the alert threshold ($ALB_LISTENER_RULE_ALERT_THRESHOLD)" >&2
+    echo "" >&2
+    echo "💡 Possible causes:" >&2
+    echo "   Too many private scopes sharing the same internal ALB" >&2
+    echo "   The ALB listener has a hard limit of rules per listener" >&2
+    echo "" >&2
+    echo "🔧 How to fix:" >&2
+    echo "   • Increase ALB_LISTENER_RULE_CAPACITY if the ALB supports more rules" >&2
+    echo "   • Remove unused scopes to free up listener rule slots" >&2
+    echo "   • Provision an additional internal ALB for this account" >&2
+    exit 1
+  fi
+
+  export ALB_LISTENER_RULE_CAPACITY
+  export ALB_LISTENER_RULE_ALERT_THRESHOLD
+fi
+
+#Output directory
+OUTPUT_DIR="$SERVICE_PATH/output/$SCOPE_ID"
+if [ -n "${NP_OUTPUT_DIR:-}" ]; then
+  OUTPUT_DIR="$NP_OUTPUT_DIR/output/$SCOPE_ID"
+fi
+
+if ! mkdir -p "$OUTPUT_DIR"; then
+  echo "❌ Failed to create output directory: $OUTPUT_DIR" >&2
+  echo "" >&2
+  echo "💡 Possible causes:" >&2
+  echo "   Filesystem permissions or disk space issue" >&2
+  echo "" >&2
+  echo "🔧 How to fix:" >&2
+  echo "   • Check permissions on the parent directory" >&2
+  echo "   • Verify available disk space with: df -h" >&2
+  exit 1
+fi
+
+echo "   ✅ output_dir=$OUTPUT_DIR"
+
+#Resource tags
+RESOURCE_TAGS_JSON=$(jq -n \
+  --arg scope_id "$SCOPE_ID" \
+  --arg namespace "$NAMESPACE_SLUG" \
+  --arg application "$APPLICATION_SLUG" \
+  --arg scope "$SCOPE_SLUG" \
+  '{
+    "nullplatform:scope-id": $scope_id,
+    "nullplatform:namespace": $namespace,
+    "nullplatform:application": $application,
+    "nullplatform:scope": $scope
+  }')
+
+#Export all variables
+export SCOPE_ID
+export SCOPE_SLUG
+export SCOPE_NRN
+export NAMESPACE_SLUG
+export APPLICATION_SLUG
+export ACCOUNT_SLUG
+export LAMBDA_FUNCTION_NAME
+export VISIBILITY
+export PACKAGE_TYPE
+export RUNTIME
+export HANDLER
+export ARCHITECTURE
+export OUTPUT_DIR
+export RESOURCE_TAGS_JSON
+
+echo ""
+echo "📋 Function: $LAMBDA_FUNCTION_NAME | Visibility: $VISIBILITY | Runtime: $RUNTIME"
+echo "✨ Scope context built successfully"

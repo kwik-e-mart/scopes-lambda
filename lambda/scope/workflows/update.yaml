@@ -1,0 +1,16 @@
+include:
+  - "$SERVICE_PATH/values.yaml"
+steps:
+  - name: build_context
+    type: script
+    file: "$SERVICE_PATH/scope/build_context"
+    output:
+      - name: SCOPE_ID
+        type: environment
+      - name: SCOPE_NRN
+        type: environment
+      - name: LAMBDA_FUNCTION_NAME
+        type: environment
+  - name: update_iam
+    type: script
+    file: "$SERVICE_PATH/scope/scripts/update_iam_role"

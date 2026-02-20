@@ -1,0 +1,166 @@
+#!/usr/bin/env bats
+
+setup() {
+  TEST_DIR="$(cd "$(dirname "$BATS_TEST_FILENAME")" && pwd)"
+  HELPERS_DIR="$TEST_DIR/helpers"
+  LAMBDA_DIR="$(cd "$TEST_DIR/../../.." && pwd)"
+
+  load "$HELPERS_DIR/test_helper.bash"
+  load "$HELPERS_DIR/mock_context.bash"
+
+  setup_test_env
+  export SERVICE_PATH="$LAMBDA_DIR"
+
+  # Create temp dir for mock binaries
+  MOCK_BIN_DIR="$(mktemp -d)"
+  export PATH="$MOCK_BIN_DIR:$PATH"
+  _TEST_CLEANUP_DIRS=("$MOCK_BIN_DIR")
+
+  export SCOPE_NRN="organization=1:account=2:namespace=3:application=4:scope=5"
+  export LAMBDA_FUNCTION_NAME="my-test-function"
+
+  # Unset exported shell functions so file-based mocks on PATH take precedence
+  unset -f aws np
+}
+
+teardown() {
+  teardown_test_env
+  for dir in "${_TEST_CLEANUP_DIRS[@]}"; do
+    [ -d "$dir" ] && rm -rf "$dir"
+  done
+}
+
+# Helper: create a mock np script
+create_np_mock() {
+  local responses_file="$MOCK_BIN_DIR/np_responses"
+  local index_file="$MOCK_BIN_DIR/np_index"
+  echo "0" > "$index_file"
+  > "$responses_file"
+
+  for resp in "$@"; do
+    echo "$resp" >> "$responses_file"
+  done
+
+  cat > "$MOCK_BIN_DIR/np" << 'MOCK_SCRIPT'
+#!/bin/bash
+MOCK_DIR="$(dirname "$0")"
+INDEX=$(cat "$MOCK_DIR/np_index")
+RESPONSE=$(sed -n "$((INDEX + 1))p" "$MOCK_DIR/np_responses")
+echo $((INDEX + 1)) > "$MOCK_DIR/np_index"
+EXIT_CODE="${RESPONSE%%:*}"
+OUTPUT="${RESPONSE#*:}"
+if [ "$EXIT_CODE" != "0" ]; then
+  echo "$OUTPUT" >&2
+  exit "$EXIT_CODE"
+fi
+echo "$OUTPUT"
+exit 0
+MOCK_SCRIPT
+  chmod +x "$MOCK_BIN_DIR/np"
+}
+
+# Helper: create a mock aws script
+create_aws_mock() {
+  local responses_file="$MOCK_BIN_DIR/aws_responses"
+  local index_file="$MOCK_BIN_DIR/aws_index"
+  echo "0" > "$index_file"
+  > "$responses_file"
+
+  for resp in "$@"; do
+    echo "$resp" >> "$responses_file"
+  done
+
+  cat > "$MOCK_BIN_DIR/aws" << 'MOCK_SCRIPT'
+#!/bin/bash
+MOCK_DIR="$(dirname "$0")"
+INDEX=$(cat "$MOCK_DIR/aws_index")
+RESPONSE=$(sed -n "$((INDEX + 1))p" "$MOCK_DIR/aws_responses")
+echo $((INDEX + 1)) > "$MOCK_DIR/aws_index"
+EXIT_CODE="${RESPONSE%%:*}"
+OUTPUT="${RESPONSE#*:}"
+if [ "$EXIT_CODE" != "0" ]; then
+  echo "$OUTPUT" >&2
+  exit "$EXIT_CODE"
+fi
+echo "$OUTPUT"
+exit 0
+MOCK_SCRIPT
+  chmod +x "$MOCK_BIN_DIR/aws"
+}
+
+@test "adjust_provisioned: sets concurrency on alias" {
+  export CONTEXT='{"parameters":{"value":"5"}}'
+
+  create_np_mock \
+    '0:{"LAMBDA_FUNCTION_MAIN_ALIAS":"main","LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_VALUE":"0"}' \
+    '0:' \
+    '0:'
+
+  create_aws_mock \
+    '0:{"RequestedProvisionedConcurrentExecutions": 5, "StatusCode": 200}'
+
+  run bash "$LAMBDA_DIR/scope/scripts/adjust_provisioned_concurrency"
+
+  assert_success
+  assert_output_contains "Provisioned concurrency set to 5"
+}
+
+@test "adjust_provisioned: removes provisioned concurrency when value is 0" {
+  export CONTEXT='{"parameters":{"value":"0"}}'
+
+  create_np_mock \
+    '0:{"LAMBDA_FUNCTION_MAIN_ALIAS":"main","LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_VALUE":"5"}' \
+    '0:' \
+    '0:'
+
+  create_aws_mock \
+    '0:'
+
+  run bash "$LAMBDA_DIR/scope/scripts/adjust_provisioned_concurrency"
+
+  assert_success
+  assert_output_contains "Provisioned concurrency configuration removed successfully"
+}
+
+@test "adjust_provisioned: uses alias from NRN" {
+  export CONTEXT='{"parameters":{"value":"3"}}'
+
+  create_np_mock \
+    '0:{"LAMBDA_FUNCTION_MAIN_ALIAS":"live","LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_VALUE":"0"}' \
+    '0:' \
+    '0:'
+
+  create_aws_mock \
+    '0:{"RequestedProvisionedConcurrentExecutions": 3, "StatusCode": 200}'
+
+  run bash "$LAMBDA_DIR/scope/scripts/adjust_provisioned_concurrency"
+
+  assert_success
+  assert_output_contains "alias=live"
+}
+
+@test "adjust_provisioned: defaults alias to main" {
+  export CONTEXT='{"parameters":{"value":"3"}}'
+
+  create_np_mock \
+    '0:{"LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_VALUE":"0"}' \
+    '0:' \
+    '0:'
+
+  create_aws_mock \
+    '0:{"RequestedProvisionedConcurrentExecutions": 3, "StatusCode": 200}'
+
+  run bash "$LAMBDA_DIR/scope/scripts/adjust_provisioned_concurrency"
+
+  assert_success
+  assert_output_contains "alias=main"
+}
+
+@test "adjust_provisioned: fails when value not provided" {
+  export CONTEXT='{"parameters":{}}'
+
+  run bash "$LAMBDA_DIR/scope/scripts/adjust_provisioned_concurrency"
+
+  assert_failure
+  assert_output_contains "'value' parameter is required"
+}
