@@ -3,7 +3,7 @@
   "slug": "adjust-reserved-concurrency",
   "type": "custom",
   "retryable": true,
-  "service_specification_id": "{{ env.Getenv \"SERVICE_SPECIFICATION_ID\" }}",
+  "service_specification_id": "{{ env.Getenv "SERVICE_SPECIFICATION_ID" }}",
   "parameters": {
     "schema": {
       "type": "object",
