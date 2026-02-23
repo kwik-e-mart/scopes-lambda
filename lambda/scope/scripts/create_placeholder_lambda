@@ -13,7 +13,7 @@ if [ -z "${LAMBDA_FUNCTION_NAME:-}" ]; then
   echo "🔧 How to fix:" >&2
   echo "   - Ensure build_context runs before this script" >&2
   echo "   - Check that LAMBDA_FUNCTION_NAME is exported" >&2
-  exit 1
+  return 1
 fi
 
 if [ -z "${LAMBDA_ROLE_ARN:-}" ]; then
@@ -24,7 +24,7 @@ if [ -z "${LAMBDA_ROLE_ARN:-}" ]; then
   echo "🔧 How to fix:" >&2
   echo "   - Ensure create_iam_role runs before this script" >&2
   echo "   - Check that LAMBDA_ROLE_ARN is exported" >&2
-  exit 1
+  return 1
 fi
 
 if [ -z "${OUTPUT_DIR:-}" ]; then
@@ -33,7 +33,7 @@ if [ -z "${OUTPUT_DIR:-}" ]; then
   echo "   - The scope runner did not set a working directory" >&2
   echo "🔧 How to fix:" >&2
   echo "   - Ensure OUTPUT_DIR is exported before running this script" >&2
-  exit 1
+  return 1
 fi
 
 echo "   📋 function_name=$LAMBDA_FUNCTION_NAME"
@@ -66,7 +66,7 @@ if ! echo "$existing_function" | grep -q "ResourceNotFoundException\|NOT_FOUND";
   export LAMBDA_FUNCTION_ARN
 
   echo "   📋 function_arn=$LAMBDA_FUNCTION_ARN"
-  exit 0
+  return 0
 fi
 
 # Skip placeholder creation for container image deployments
@@ -82,7 +82,7 @@ if [ "$package_type" = "Image" ]; then
 
   echo ""
   echo "✨ Placeholder skipped for container image scope: function_name=$LAMBDA_FUNCTION_NAME"
-  exit 0
+  return 0
 fi
 
 # Create placeholder code
@@ -226,7 +226,7 @@ else
   echo "🔄 Rolling back: cleaning up resources..." >&2
   # The caller should handle IAM role cleanup based on this exit code
   # We only clean up resources created in this script
-  exit 1
+  return 1
 fi
 
 # Create main alias

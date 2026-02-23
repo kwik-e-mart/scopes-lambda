@@ -30,7 +30,7 @@ if [ -n "$existing_role_arn" ] && [ "$existing_role_arn" != "null" ] && [ "$exis
   LAMBDA_ROLE_NAME="$existing_role_name"
   export LAMBDA_ROLE_ARN
   export LAMBDA_ROLE_NAME
-  exit 0
+  return 0
 fi
 
 # If not using dedicated role, check for default role in context
@@ -41,7 +41,7 @@ if [ "$use_dedicated_role" != "true" ]; then
     echo "   ✅ Using default execution role: $default_role"
     LAMBDA_ROLE_ARN="$default_role"
     export LAMBDA_ROLE_ARN
-    exit 0
+    return 0
   fi
 
   echo "❌ No Lambda execution role configured" >&2
@@ -51,7 +51,7 @@ if [ "$use_dedicated_role" != "true" ]; then
   echo "🔧 How to fix:" >&2
   echo "   - Enable dedicated roles by setting AWS_LAMBDA_USE_DEDICATED_ROLE=true in NRN" >&2
   echo "   - Or configure lambda.execution_role_arn in cloud-provider" >&2
-  exit 1
+  return 1
 fi
 
 # Create dedicated role
@@ -109,7 +109,7 @@ else
     echo "   - Verify the agent has iam:CreateRole permission" >&2
     echo "   - Check AWS CloudTrail for detailed error information" >&2
     echo "   - AWS error: $create_output" >&2
-    exit 1
+    return 1
   fi
 
   LAMBDA_ROLE_ARN=$(echo "$create_output" | jq -r '.Role.Arn')
@@ -132,7 +132,7 @@ else
     echo "🔧 How to fix:" >&2
     echo "   - Verify the agent has iam:AttachRolePolicy permission" >&2
     echo "   - AWS error: $attach_output" >&2
-    exit 1
+    return 1
   fi
 
   echo "   ✅ Attached AWSLambdaBasicExecutionRole"
@@ -153,7 +153,7 @@ else
       echo "🔧 How to fix:" >&2
       echo "   - Verify the agent has iam:AttachRolePolicy permission" >&2
       echo "   - AWS error: $vpc_attach_output" >&2
-      exit 1
+      return 1
     fi
 
     echo "   ✅ Attached AWSLambdaVPCAccessExecutionRole (vpc_enabled=$vpc_enabled)"
@@ -183,7 +183,7 @@ else
         echo "🔧 How to fix:" >&2
         echo "   - Validate the policy document in AWS_LAMBDA_DEDICATED_ROLE_POLICIES NRN key" >&2
         echo "   - AWS error: $put_output" >&2
-        exit 1
+        return 1
       fi
 
       echo "   ✅ Attached custom policy: $policy_name"
@@ -210,7 +210,7 @@ if [ $nrn_write_exit_code -ne 0 ]; then
   echo "🔧 How to fix:" >&2
   echo "   - Check nullplatform API connectivity" >&2
   echo "   - NRN error: $nrn_write_output" >&2
-  exit 1
+  return 1
 fi
 
 # Export variables
