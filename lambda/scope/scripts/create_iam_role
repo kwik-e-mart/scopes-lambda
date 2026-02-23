@@ -13,14 +13,14 @@ role_policies="[]"
 existing_role_arn=""
 existing_role_name=""
 
-nrn_output=$(np nrn read --nrn "$SCOPE_NRN" --namespace aws --format json 2>&1 || echo "{}")
+nrn_output=$(np nrn read --nrn "$SCOPE_NRN" --ids "lambda.aws_lambda_use_dedicated_role,lambda.aws_lambda_dedicated_role_name_template,lambda.aws_lambda_dedicated_role_policies,lambda.aws_dedicated_role_arn,lambda.aws_dedicated_role_name" --format json 2>&1 || echo "{}")
 
 if [ "$nrn_output" != "{}" ]; then
-  use_dedicated_role=$(echo "$nrn_output" | jq -r '.AWS_LAMBDA_USE_DEDICATED_ROLE // "false"')
-  role_name_template=$(echo "$nrn_output" | jq -r '.AWS_LAMBDA_DEDICATED_ROLE_NAME_TEMPLATE // ""')
-  role_policies=$(echo "$nrn_output" | jq -r '.AWS_LAMBDA_DEDICATED_ROLE_POLICIES // "[]"')
-  existing_role_arn=$(echo "$nrn_output" | jq -r '.AWS_DEDICATED_ROLE_ARN // ""')
-  existing_role_name=$(echo "$nrn_output" | jq -r '.AWS_DEDICATED_ROLE_NAME // ""')
+  use_dedicated_role=$(echo "$nrn_output" | jq -r '."lambda.aws_lambda_use_dedicated_role" // "false"')
+  role_name_template=$(echo "$nrn_output" | jq -r '."lambda.aws_lambda_dedicated_role_name_template" // ""')
+  role_policies=$(echo "$nrn_output" | jq -r '."lambda.aws_lambda_dedicated_role_policies" // "[]"')
+  existing_role_arn=$(echo "$nrn_output" | jq -r '."lambda.aws_dedicated_role_arn" // ""')
+  existing_role_name=$(echo "$nrn_output" | jq -r '."lambda.aws_dedicated_role_name" // ""')
 fi
 
 echo "   📋 use_dedicated_role=$use_dedicated_role"
@@ -199,8 +199,8 @@ echo "   📡 Storing role info in NRN..."
 
 nrn_write_output=$(np nrn write \
   --nrn "$SCOPE_NRN" \
-  --namespace aws \
-  --body "{\"AWS_DEDICATED_ROLE_ARN\": \"$LAMBDA_ROLE_ARN\", \"AWS_DEDICATED_ROLE_NAME\": \"$LAMBDA_ROLE_NAME\"}" \
+  --namespace lambda \
+  --body "{\"aws_dedicated_role_arn\": \"$LAMBDA_ROLE_ARN\", \"aws_dedicated_role_name\": \"$LAMBDA_ROLE_NAME\"}" \
   --format json 2>&1)
 nrn_write_exit_code=$?
 

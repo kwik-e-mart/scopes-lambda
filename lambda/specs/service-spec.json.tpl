@@ -10,7 +10,12 @@
         "timeout",
         "architecture",
         "visibility",
-        "continuous_delivery"
+        "continuous_delivery",
+        "ephemeral_storage",
+        "layers",
+        "vpc_enabled",
+        "reserved_concurrency",
+        "provisioned_concurrency"
       ],
       "uiSchema": {
         "type": "VerticalLayout",
