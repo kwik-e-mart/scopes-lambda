@@ -85,64 +85,16 @@ if [ "$package_type" = "Image" ]; then
   return 0
 fi
 
-# Create placeholder code
+# Create placeholder zip from embedded base64
+# Contains index.js with a minimal Node.js handler (compatible with all runtimes as placeholder)
 echo ""
-echo "   📝 Creating placeholder code..."
+echo "   📝 Creating placeholder zip..."
 
-placeholder_dir="$OUTPUT_DIR/placeholder"
-mkdir -p "$placeholder_dir"
-
-# Create simple placeholder handler based on runtime
-case "$runtime" in
-  nodejs*)
-    cat > "$placeholder_dir/index.js" << 'EOF'
-exports.handler = async (event) => {
-  return {
-    statusCode: 200,
-    body: JSON.stringify({
-      message: 'Placeholder Lambda - awaiting deployment',
-      timestamp: new Date().toISOString()
-    })
-  };
-};
-EOF
-    ;;
-  python*)
-    cat > "$placeholder_dir/lambda_function.py" << 'EOF'
-import json
-from datetime import datetime
-
-def lambda_handler(event, context):
-    return {
-        'statusCode': 200,
-        'body': json.dumps({
-            'message': 'Placeholder Lambda - awaiting deployment',
-            'timestamp': datetime.utcnow().isoformat()
-        })
-    }
-EOF
-    ;;
-  *)
-    # Default to Node.js
-    cat > "$placeholder_dir/index.js" << 'EOF'
-exports.handler = async (event) => {
-  return {
-    statusCode: 200,
-    body: JSON.stringify({
-      message: 'Placeholder Lambda - awaiting deployment',
-      timestamp: new Date().toISOString()
-    })
-  };
-};
-EOF
-    ;;
-esac
-
-# Create zip file
 zip_file="$OUTPUT_DIR/placeholder.zip"
-(cd "$placeholder_dir" && zip -q -r "$zip_file" .)
+echo "UEsDBBQAAAAIABJ3V1wwajY9igAAAJ8AAAAIABwAaW5kZXguanNVVAkAA9SUnGnUlJxpdXgLAAEE9QEAAAQUAAAAHY1BCoMwFET3nmJ2KrQiXVrspjspbaEn+JpfFWIiybdtEO/eIMxiGB7z+DdbJ74YyCjNDjXIB9Mh4w8byVFfsCaAY1mc2SvghWTxV6u4wqksD/vYWhUqNK/HvfDiRtOP75CtmNh76iOYPjV1PFitouVGU6sIR9CXRokwFM/ahik6U2x5fNzOScwfUEsBAh4DFAAAAAgAEndXXDBqNj2KAAAAnwAAAAgAGAAAAAAAAQAAAKSBAAAAAGluZGV4LmpzVVQFAAPUlJxpdXgLAAEE9QEAAAQUAAAAUEsFBgAAAAABAAEATgAAAMwAAAAAAA==" \
+  | base64 -d > "$zip_file"
 
-echo "   ✅ Placeholder code created and packaged"
+echo "   ✅ Placeholder zip ready"
 
 # Create the Lambda function
 echo ""
@@ -221,7 +173,7 @@ else
   echo "   - AWS error: $create_output" >&2
 
   # Rollback: clean up temporary files
-  rm -rf "$placeholder_dir" "$zip_file"
+  rm -f "$zip_file"
 
   echo "🔄 Rolling back: cleaning up resources..." >&2
   # The caller should handle IAM role cleanup based on this exit code
@@ -245,7 +197,7 @@ alias_output=$(aws lambda create-alias \
 echo "   ✅ Alias '$alias_name' created for function $LAMBDA_FUNCTION_NAME"
 
 # Cleanup temporary files
-rm -rf "$placeholder_dir" "$zip_file"
+rm -f "$zip_file"
 
 # Export function ARN
 export LAMBDA_FUNCTION_ARN
