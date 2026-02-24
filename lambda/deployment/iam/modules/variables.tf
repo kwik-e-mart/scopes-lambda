@@ -1,6 +1,7 @@
 variable "iam_role_name" {
   description = "Name of the IAM role"
   type        = string
+  default     = ""
 }
 
 variable "iam_create_role" {
