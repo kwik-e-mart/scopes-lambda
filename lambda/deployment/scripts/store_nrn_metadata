@@ -145,8 +145,9 @@ echo "   📡 Writing metadata to NRN=$SCOPE_NRN..."
 
 # Prefix all keys with "lambda." namespace
 metadata=$(echo "$metadata" | jq 'with_entries(.key = "lambda." + .key)')
+echo "   ✅ Final metadata payload: $metadata"
 
-np_output=$(np nrn write \
+np_output=$(np nrn patch \
   --nrn "$SCOPE_NRN" \
   --body "$metadata" \
   --format json 2>&1)
