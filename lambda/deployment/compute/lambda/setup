@@ -160,7 +160,6 @@ TOFU_VARIABLES=$(echo "$TOFU_VARIABLES" | jq \
   --argjson timeout "$timeout" \
   --argjson ephemeral_storage "$ephemeral_storage" \
   --arg architecture "$architecture" \
-  --arg role_arn "$lambda_role_arn" \
   --arg s3_bucket "$lambda_s3_bucket" \
   --arg s3_key "$lambda_s3_key" \
   --argjson environment_variables "$env_vars" \
@@ -180,7 +179,6 @@ TOFU_VARIABLES=$(echo "$TOFU_VARIABLES" | jq \
     lambda_timeout: $timeout,
     lambda_ephemeral_storage: $ephemeral_storage,
     lambda_architecture: $architecture,
-    lambda_role_arn: $role_arn,
     lambda_s3_bucket: $s3_bucket,
     lambda_s3_key: $s3_key,
     lambda_environment_variables: $environment_variables,
