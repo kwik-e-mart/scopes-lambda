@@ -26,6 +26,7 @@ if [ $nrn_exit_code -eq 0 ]; then
   role_entity=$(echo "$nrn_output" | jq -r '.namespaces.lambda.aws_lambda_dedicated_role_entity // "scope"')
   existing_role_arn=$(echo "$nrn_output" | jq -r '.namespaces.lambda.aws_dedicated_role_arn // ""')
   existing_role_name=$(echo "$nrn_output" | jq -r '.namespaces.lambda.aws_dedicated_role_name // ""')
+  execution_role_arn=$(echo "$nrn_output" | jq -r '.namespaces.lambda.aws_lambda_execution_role_arn // ""')
 fi
 
 echo "   ✅ use_dedicated_role=$use_dedicated_role"
@@ -33,7 +34,7 @@ echo "   ✅ role_entity=$role_entity"
 
 # If not using dedicated role, check for existing role ARN in context
 if [ "$use_dedicated_role" != "true" ]; then
-  lambda_role_arn=$(echo "$CONTEXT" | jq -r '.lambda.role_arn // empty')
+  lambda_role_arn=$execution_role_arn
 
   if [ -z "$lambda_role_arn" ] || [ "$lambda_role_arn" = "null" ]; then
     lambda_role_arn=$(echo "$CONTEXT" | jq -r '.providers["cloud-providers"].lambda.execution_role_arn // empty')
