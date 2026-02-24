@@ -64,22 +64,22 @@ LAMBDA_ROLE_ARN=""
 LAMBDA_CURRENT_VERSION=""
 LAMBDA_MAIN_ALIAS_NAME="${LAMBDA_MAIN_ALIAS_NAME:-main}"
 
-nrn_output=$(np nrn read --nrn "$SCOPE_NRN" --namespace aws --format json 2>&1 || echo "{}")
+nrn_output=$(np nrn read --nrn "$SCOPE_NRN" --ids "aws.LAMBDA_FUNCTION_ARN,aws.LAMBDA_ROLE_ARN,aws.LAMBDA_FUNCTION_CURRENT_VERSION,aws.LAMBDA_FUNCTION_MAIN_ALIAS,aws.LAMBDA_CURRENT_RESERVED_CONCURRENCY_TYPE,aws.LAMBDA_CURRENT_RESERVED_CONCURRENCY_VALUE,aws.LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_TYPE,aws.LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_VALUE" --format json 2>&1 || echo "{}")
 
 if [ "$nrn_output" != "{}" ]; then
-  LAMBDA_FUNCTION_ARN=$(echo "$nrn_output" | jq -r '.LAMBDA_FUNCTION_ARN // ""')
-  LAMBDA_ROLE_ARN=$(echo "$nrn_output" | jq -r '.LAMBDA_ROLE_ARN // ""')
-  LAMBDA_CURRENT_VERSION=$(echo "$nrn_output" | jq -r '.LAMBDA_FUNCTION_CURRENT_VERSION // ""')
-  stored_alias=$(echo "$nrn_output" | jq -r '.LAMBDA_FUNCTION_MAIN_ALIAS // ""')
+  LAMBDA_FUNCTION_ARN=$(echo "$nrn_output" | jq -r '.namespaces.aws.LAMBDA_FUNCTION_ARN // ""')
+  LAMBDA_ROLE_ARN=$(echo "$nrn_output" | jq -r '.namespaces.aws.LAMBDA_ROLE_ARN // ""')
+  LAMBDA_CURRENT_VERSION=$(echo "$nrn_output" | jq -r '.namespaces.aws.LAMBDA_FUNCTION_CURRENT_VERSION // ""')
+  stored_alias=$(echo "$nrn_output" | jq -r '.namespaces.aws.LAMBDA_FUNCTION_MAIN_ALIAS // ""')
   if [ -n "$stored_alias" ] && [ "$stored_alias" != "null" ]; then
     LAMBDA_MAIN_ALIAS_NAME="$stored_alias"
   fi
 
   # Read current concurrency state for rollback tracking
-  LAMBDA_CURRENT_RESERVED_CONCURRENCY_TYPE=$(echo "$nrn_output" | jq -r '.LAMBDA_CURRENT_RESERVED_CONCURRENCY_TYPE // ""')
-  LAMBDA_CURRENT_RESERVED_CONCURRENCY_VALUE=$(echo "$nrn_output" | jq -r '.LAMBDA_CURRENT_RESERVED_CONCURRENCY_VALUE // ""')
-  LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_TYPE=$(echo "$nrn_output" | jq -r '.LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_TYPE // ""')
-  LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_VALUE=$(echo "$nrn_output" | jq -r '.LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_VALUE // ""')
+  LAMBDA_CURRENT_RESERVED_CONCURRENCY_TYPE=$(echo "$nrn_output" | jq -r '.namespaces.aws.LAMBDA_CURRENT_RESERVED_CONCURRENCY_TYPE // ""')
+  LAMBDA_CURRENT_RESERVED_CONCURRENCY_VALUE=$(echo "$nrn_output" | jq -r '.namespaces.aws.LAMBDA_CURRENT_RESERVED_CONCURRENCY_VALUE // ""')
+  LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_TYPE=$(echo "$nrn_output" | jq -r '.namespaces.aws.LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_TYPE // ""')
+  LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_VALUE=$(echo "$nrn_output" | jq -r '.namespaces.aws.LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_VALUE // ""')
 else
   LAMBDA_CURRENT_RESERVED_CONCURRENCY_TYPE=""
   LAMBDA_CURRENT_RESERVED_CONCURRENCY_VALUE=""
@@ -119,20 +119,7 @@ AWS_REGION=$(get_config_value \
   --default "us-east-1"
 )
 echo "   ✅ aws_region=$AWS_REGION"
-
-AWS_ACCESS_KEY_ID=$(echo "$CONTEXT" | jq -r '.providers["cloud-providers"].credentials.access_key_id // ""')
-AWS_SECRET_ACCESS_KEY=$(echo "$CONTEXT" | jq -r '.providers["cloud-providers"].credentials.secret_access_key // ""')
-
-if [ -z "$AWS_ACCESS_KEY_ID" ] || [ "$AWS_ACCESS_KEY_ID" = "null" ]; then
-  echo "❌ Missing AWS access key from cloud-providers" >&2
-  echo "💡 Possible causes:" >&2
-  echo "   - The cloud-providers provider is not configured for this scope" >&2
-  echo "   - Credentials are missing from the provider configuration" >&2
-  echo "🔧 How to fix:" >&2
-  echo "   - Ensure the cloud-providers provider is linked to the scope with valid AWS credentials" >&2
-  exit 1
-fi
-echo "   ✅ aws_credentials=configured"
+echo "   ✅ aws_credentials=service_account"
 
 # Extract assets-repository credentials for S3 access
 ASSETS_ACCESS_KEY_ID=$(echo "$CONTEXT" | jq -r '.providers["assets-repository"].credentials.access_key_id // ""')
@@ -552,8 +539,6 @@ export DESIRED_TRAFFIC
 export IS_BLUE_GREEN
 export BLUE_DEPLOYMENT_ID
 export AWS_REGION
-export AWS_ACCESS_KEY_ID
-export AWS_SECRET_ACCESS_KEY
 export ASSETS_ACCESS_KEY_ID
 export ASSETS_SECRET_ACCESS_KEY
 export ASSETS_REGION

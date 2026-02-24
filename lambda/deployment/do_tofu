@@ -8,6 +8,26 @@ echo "📋 Lambda function: $LAMBDA_FUNCTION_NAME"
 
 echo "📋 Working directory: $TF_WORKING_DIR"
 
+# Verify tofu is installed
+if ! command -v tofu &> /dev/null; then
+  echo ""
+  echo "❌ OpenTofu (tofu) is not installed or not found in PATH"
+  echo ""
+  echo "💡 Possible causes:"
+  echo "   - The agent container image does not include the tofu binary"
+  echo "   - PATH does not include the tofu installation directory"
+  echo ""
+  echo "🔧 How to fix:"
+  echo "   - Add OpenTofu to the agent container image"
+  echo "   - Installation guide: https://opentofu.org/docs/intro/install/"
+  echo "   - Verify with: which tofu"
+  echo ""
+  exit 1
+fi
+
+tofu_version=$(tofu version 2>&1 | head -1)
+echo "   ✅ tofu=$tofu_version"
+
 # Verify working directory has terraform files
 if [ ! -d "$TF_WORKING_DIR" ]; then
   echo "❌ Working directory does not exist: $TF_WORKING_DIR"
