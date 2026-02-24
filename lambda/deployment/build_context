@@ -64,22 +64,22 @@ LAMBDA_ROLE_ARN=""
 LAMBDA_CURRENT_VERSION=""
 LAMBDA_MAIN_ALIAS_NAME="${LAMBDA_MAIN_ALIAS_NAME:-main}"
 
-nrn_output=$(np nrn read --nrn "$SCOPE_NRN" --ids "aws.LAMBDA_FUNCTION_ARN,aws.LAMBDA_ROLE_ARN,aws.LAMBDA_FUNCTION_CURRENT_VERSION,aws.LAMBDA_FUNCTION_MAIN_ALIAS,aws.LAMBDA_CURRENT_RESERVED_CONCURRENCY_TYPE,aws.LAMBDA_CURRENT_RESERVED_CONCURRENCY_VALUE,aws.LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_TYPE,aws.LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_VALUE" --format json 2>&1 || echo "{}")
+nrn_output=$(np nrn read --nrn "$SCOPE_NRN" --ids "lambda.lambda_function_arn,lambda.lambda_role_arn,lambda.lambda_function_current_version,lambda.lambda_function_main_alias,lambda.lambda_current_reserved_concurrency_type,lambda.lambda_current_reserved_concurrency_value,lambda.lambda_current_provisioned_concurrency_type,lambda.lambda_current_provisioned_concurrency_value" --format json 2>&1 || echo "{}")
 
 if [ "$nrn_output" != "{}" ]; then
-  LAMBDA_FUNCTION_ARN=$(echo "$nrn_output" | jq -r '.namespaces.aws.LAMBDA_FUNCTION_ARN // ""')
-  LAMBDA_ROLE_ARN=$(echo "$nrn_output" | jq -r '.namespaces.aws.LAMBDA_ROLE_ARN // ""')
-  LAMBDA_CURRENT_VERSION=$(echo "$nrn_output" | jq -r '.namespaces.aws.LAMBDA_FUNCTION_CURRENT_VERSION // ""')
-  stored_alias=$(echo "$nrn_output" | jq -r '.namespaces.aws.LAMBDA_FUNCTION_MAIN_ALIAS // ""')
+  LAMBDA_FUNCTION_ARN=$(echo "$nrn_output" | jq -r '.namespaces.lambda.lambda_function_arn // ""')
+  LAMBDA_ROLE_ARN=$(echo "$nrn_output" | jq -r '.namespaces.lambda.lambda_role_arn // ""')
+  LAMBDA_CURRENT_VERSION=$(echo "$nrn_output" | jq -r '.namespaces.lambda.lambda_function_current_version // ""')
+  stored_alias=$(echo "$nrn_output" | jq -r '.namespaces.lambda.lambda_function_main_alias // ""')
   if [ -n "$stored_alias" ] && [ "$stored_alias" != "null" ]; then
     LAMBDA_MAIN_ALIAS_NAME="$stored_alias"
   fi
 
   # Read current concurrency state for rollback tracking
-  LAMBDA_CURRENT_RESERVED_CONCURRENCY_TYPE=$(echo "$nrn_output" | jq -r '.namespaces.aws.LAMBDA_CURRENT_RESERVED_CONCURRENCY_TYPE // ""')
-  LAMBDA_CURRENT_RESERVED_CONCURRENCY_VALUE=$(echo "$nrn_output" | jq -r '.namespaces.aws.LAMBDA_CURRENT_RESERVED_CONCURRENCY_VALUE // ""')
-  LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_TYPE=$(echo "$nrn_output" | jq -r '.namespaces.aws.LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_TYPE // ""')
-  LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_VALUE=$(echo "$nrn_output" | jq -r '.namespaces.aws.LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_VALUE // ""')
+  LAMBDA_CURRENT_RESERVED_CONCURRENCY_TYPE=$(echo "$nrn_output" | jq -r '.namespaces.lambda.lambda_current_reserved_concurrency_type // ""')
+  LAMBDA_CURRENT_RESERVED_CONCURRENCY_VALUE=$(echo "$nrn_output" | jq -r '.namespaces.lambda.lambda_current_reserved_concurrency_value // ""')
+  LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_TYPE=$(echo "$nrn_output" | jq -r '.namespaces.lambda.lambda_current_provisioned_concurrency_type // ""')
+  LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_VALUE=$(echo "$nrn_output" | jq -r '.namespaces.lambda.lambda_current_provisioned_concurrency_value // ""')
 else
   LAMBDA_CURRENT_RESERVED_CONCURRENCY_TYPE=""
   LAMBDA_CURRENT_RESERVED_CONCURRENCY_VALUE=""

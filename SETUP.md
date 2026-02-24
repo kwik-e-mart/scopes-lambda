@@ -93,13 +93,40 @@ export NP_API_KEY="<your-api-key>"
 
 ---
 
-## Step 4 — Add the repo to the agent
+## Step 4 — Configure the agent secret
+
+The agent pod requires two additional environment variables for OpenTofu state management. Add them to the agent's Kubernetes Secret:
+
+| Variable           | Description                                      | Example                                              |
+|--------------------|--------------------------------------------------|------------------------------------------------------|
+| `TOFU_STATE_BUCKET` | S3 bucket where Terraform state files are stored | `null-service-provisioning-kwik-e-mart-main`         |
+| `TOFU_LOCK_TABLE`   | DynamoDB table used for state locking            | `service-provisioning-terraform-state-lock`          |
+
+The table must have a partition key named `LockID` (String). A single table can be shared across multiple workspaces — each lock is identified by the full state path (`bucket/lambda/{scope_id}/terraform.tfstate`), so there is no collision between scopes.
+
+To add the values, base64-encode them and patch the Secret:
+
+```bash
+kubectl patch secret nullplatform-agent-secret-javi \
+  -n nullplatform-tools \
+  --type merge \
+  -p "{\"data\":{
+    \"TOFU_STATE_BUCKET\": \"$(echo -n 'null-service-provisioning-kwik-e-mart-main' | base64)\",
+    \"TOFU_LOCK_TABLE\": \"$(echo -n 'service-provisioning-terraform-state-lock' | base64)\"
+  }}"
+```
+
+---
+
+## Step 5 — Add the repo to the agent
 
 Add this repo to the agent's list of command executor repos:
 
 ```
 https://github.com/kwik-e-mart/scopes-lambda#main
 ```
+
+---
 
 ---
 
