@@ -17,7 +17,7 @@ resource "aws_route53_record" "api_gateway" {
 # Note: For ALB, we typically need the ALB DNS name passed via context
 # This is a placeholder - actual implementation depends on how ALB domain is provided
 resource "aws_route53_record" "alb" {
-  count = local.dns_use_api_gateway ? 0 : 1
+  count = var.dns_alb_host_header != "" ? 1 : 0
 
   zone_id = var.dns_hosted_zone_id
   name    = var.dns_full_domain
