@@ -14,9 +14,12 @@ role_policies="[]"
 role_entity="scope"
 existing_role_arn=""
 existing_role_name=""
+execution_role_arn=""
 
 # Read NRN configuration for IAM
 nrn_output=$(np nrn read --nrn "$scope_nrn" --ids "lambda.aws_lambda_use_dedicated_role,lambda.aws_lambda_dedicated_role_name_template,lambda.aws_lambda_dedicated_role_policies,lambda.aws_lambda_dedicated_role_entity,lambda.aws_dedicated_role_arn,lambda.aws_dedicated_role_name" --format json 2>&1)
+echo "NRN: $nrn_output"
+
 nrn_exit_code=$?
 
 if [ $nrn_exit_code -eq 0 ]; then
