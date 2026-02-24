@@ -16,16 +16,16 @@ existing_role_arn=""
 existing_role_name=""
 
 # Read NRN configuration for IAM
-nrn_output=$(np nrn read --nrn "$scope_nrn" --namespace aws --format json 2>&1)
+nrn_output=$(np nrn read --nrn "$scope_nrn" --ids "lambda.aws_lambda_use_dedicated_role,lambda.aws_lambda_dedicated_role_name_template,lambda.aws_lambda_dedicated_role_policies,lambda.aws_lambda_dedicated_role_entity,lambda.aws_dedicated_role_arn,lambda.aws_dedicated_role_name" --format json 2>&1)
 nrn_exit_code=$?
 
 if [ $nrn_exit_code -eq 0 ]; then
-  use_dedicated_role=$(echo "$nrn_output" | jq -r '.AWS_LAMBDA_USE_DEDICATED_ROLE // "false"')
-  role_name_template=$(echo "$nrn_output" | jq -r '.AWS_LAMBDA_DEDICATED_ROLE_NAME_TEMPLATE // ""')
-  role_policies=$(echo "$nrn_output" | jq -r '.AWS_LAMBDA_DEDICATED_ROLE_POLICIES // "[]"')
-  role_entity=$(echo "$nrn_output" | jq -r '.AWS_LAMBDA_DEDICATED_ROLE_ENTITY // "scope"')
-  existing_role_arn=$(echo "$nrn_output" | jq -r '.AWS_DEDICATED_ROLE_ARN // ""')
-  existing_role_name=$(echo "$nrn_output" | jq -r '.AWS_DEDICATED_ROLE_NAME // ""')
+  use_dedicated_role=$(echo "$nrn_output" | jq -r '.namespaces.lambda.aws_lambda_use_dedicated_role // "false"')
+  role_name_template=$(echo "$nrn_output" | jq -r '.namespaces.lambda.aws_lambda_dedicated_role_name_template // ""')
+  role_policies=$(echo "$nrn_output" | jq -r '.namespaces.lambda.aws_lambda_dedicated_role_policies // "[]"')
+  role_entity=$(echo "$nrn_output" | jq -r '.namespaces.lambda.aws_lambda_dedicated_role_entity // "scope"')
+  existing_role_arn=$(echo "$nrn_output" | jq -r '.namespaces.lambda.aws_dedicated_role_arn // ""')
+  existing_role_name=$(echo "$nrn_output" | jq -r '.namespaces.lambda.aws_dedicated_role_name // ""')
 fi
 
 echo "   ✅ use_dedicated_role=$use_dedicated_role"
