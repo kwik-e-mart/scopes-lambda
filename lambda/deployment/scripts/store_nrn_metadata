@@ -143,9 +143,11 @@ fi
 echo ""
 echo "   📡 Writing metadata to NRN=$SCOPE_NRN..."
 
+# Prefix all keys with "lambda." namespace
+metadata=$(echo "$metadata" | jq 'with_entries(.key = "lambda." + .key)')
+
 np_output=$(np nrn write \
   --nrn "$SCOPE_NRN" \
-  --namespace lambda \
   --body "$metadata" \
   --format json 2>&1)
 np_exit_code=$?
