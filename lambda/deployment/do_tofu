@@ -56,6 +56,46 @@ fi
 echo "📝 Initializing tofu..."
 tofu -chdir="$TF_WORKING_DIR" init -input=false $TOFU_INIT_VARIABLES
 
+# Import placeholder resources that exist in AWS but not in Tofu state
+# Scope creation creates a placeholder Lambda function + alias via AWS CLI outside of Tofu state.
+# On initial deployment, we need to import them to avoid 409 ResourceConflictException.
+if [ "$TOFU_ACTION" = "apply" ]; then
+  echo ""
+  echo "📝 Checking for resources to import..."
+
+  main_alias_name=$(echo "$TOFU_VARIABLES" | jq -r '.lambda_main_alias_name // "main"')
+
+  # Import Lambda function
+  if ! tofu -chdir="$TF_WORKING_DIR" state show aws_lambda_function.main &>/dev/null; then
+    if aws lambda get-function --function-name "$LAMBDA_FUNCTION_NAME" &>/dev/null 2>&1; then
+      echo "   📡 Importing existing Lambda function: $LAMBDA_FUNCTION_NAME"
+      tofu -chdir="$TF_WORKING_DIR" import -var-file="$TOFU_VAR_FILE" aws_lambda_function.main "$LAMBDA_FUNCTION_NAME"
+      echo "   ✅ Lambda function imported"
+    fi
+  fi
+
+  # Import main alias
+  if ! tofu -chdir="$TF_WORKING_DIR" state show aws_lambda_alias.main &>/dev/null; then
+    if aws lambda get-alias --function-name "$LAMBDA_FUNCTION_NAME" --name "$main_alias_name" &>/dev/null 2>&1; then
+      echo "   📡 Importing existing Lambda alias: $LAMBDA_FUNCTION_NAME/$main_alias_name"
+      tofu -chdir="$TF_WORKING_DIR" import -var-file="$TOFU_VAR_FILE" aws_lambda_alias.main "$LAMBDA_FUNCTION_NAME/$main_alias_name"
+      echo "   ✅ Lambda alias imported"
+    fi
+  fi
+
+  # Import CloudWatch log group (auto-created on first Lambda invocation)
+  log_group_name="/aws/lambda/$LAMBDA_FUNCTION_NAME"
+  if ! tofu -chdir="$TF_WORKING_DIR" state show aws_cloudwatch_log_group.lambda &>/dev/null; then
+    if aws logs describe-log-groups --log-group-name-prefix "$log_group_name" \
+        --query "logGroups[?logGroupName=='$log_group_name'] | [0].logGroupName" \
+        --output text 2>/dev/null | grep -q "$log_group_name"; then
+      echo "   📡 Importing existing CloudWatch log group: $log_group_name"
+      tofu -chdir="$TF_WORKING_DIR" import -var-file="$TOFU_VAR_FILE" aws_cloudwatch_log_group.lambda "$log_group_name"
+      echo "   ✅ CloudWatch log group imported"
+    fi
+  fi
+fi
+
 # Run tofu action
 echo "📝 Running tofu $TOFU_ACTION..."
 tofu -chdir="$TF_WORKING_DIR" "$TOFU_ACTION" -auto-approve -var-file="$TOFU_VAR_FILE"
