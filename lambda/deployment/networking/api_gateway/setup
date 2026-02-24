@@ -9,7 +9,7 @@ if [ "$visibility" != "public" ]; then
   echo ""
   echo "   ⏭️  Skipping API Gateway - visibility is '$visibility' (not public)"
   echo ""
-  return 0 2>/dev/null || exit 0
+  return 0 2>/dev/null || return 0
 fi
 
 echo "   ✅ visibility=public"
@@ -57,7 +57,7 @@ if [ -z "$lambda_function_name" ]; then
   echo "  💡 Possible causes:"
   echo "    • The compute/lambda layer was not set up before this layer"
   echo ""
-  exit 1
+  return 1
 fi
 
 echo "   ✅ lambda_function_name=$lambda_function_name"

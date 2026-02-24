@@ -12,19 +12,19 @@ if [ -z "${LAMBDA_FUNCTION_NAME:-}" ]; then
   echo "🔧 How to fix:" >&2
   echo "   - Ensure the scope has a valid Lambda function configured" >&2
   echo "   - Check that LAMBDA_FUNCTION_NAME is exported before this script runs" >&2
-  exit 1
+  return 1
 fi
 
 new_version="${LAMBDA_NEW_VERSION:-}"
 
 if [ -z "$new_version" ] || [ "$new_version" = "null" ]; then
   echo "   ⏭️  No new version specified to cleanup"
-  exit 0
+  return 0
 fi
 
 if [ "$new_version" = "\$LATEST" ]; then
   echo "   ⏭️  Cannot delete \$LATEST"
-  exit 0
+  return 0
 fi
 
 echo "   ✅ function_name=$LAMBDA_FUNCTION_NAME"

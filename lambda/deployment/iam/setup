@@ -50,7 +50,7 @@ if [ "$use_dedicated_role" != "true" ]; then
     echo "    • Enable dedicated roles via NRN configuration"
     echo "    • Or configure lambda.execution_role_arn in the cloud-provider"
     echo ""
-    exit 1
+    return 1
   fi
 
   echo "   ✅ Using existing role: $lambda_role_arn"
@@ -63,7 +63,7 @@ if [ "$use_dedicated_role" != "true" ]; then
   echo ""
   echo "✨ IAM configured (using existing role)"
   echo ""
-  return 0 2>/dev/null || exit 0
+  return 0 2>/dev/null || return 0
 fi
 
 # Using dedicated role - validate required fields
@@ -74,7 +74,7 @@ if [ -z "$role_name_template" ] || [ "$role_name_template" = "null" ] || [ "$rol
   echo "  🔧 How to fix:"
   echo "    Set AWS_LAMBDA_DEDICATED_ROLE_NAME_TEMPLATE in NRN configuration"
   echo ""
-  exit 1
+  return 1
 fi
 
 if [ "$role_policies" = "[]" ] || [ "$role_policies" = "null" ]; then
@@ -84,7 +84,7 @@ if [ "$role_policies" = "[]" ] || [ "$role_policies" = "null" ]; then
   echo "  🔧 How to fix:"
   echo "    Set AWS_LAMBDA_DEDICATED_ROLE_POLICIES in NRN configuration"
   echo ""
-  exit 1
+  return 1
 fi
 
 echo "   ✅ role_name_template=$role_name_template"

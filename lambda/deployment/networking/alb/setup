@@ -9,7 +9,7 @@ if [ "$visibility" != "private" ] && [ "$visibility" != "internal" ]; then
   echo ""
   echo "   ⏭️  Skipping ALB - visibility is '$visibility' (not private/internal)"
   echo ""
-  return 0 2>/dev/null || exit 0
+  return 0 2>/dev/null || return 0
 fi
 
 echo "   ✅ visibility=$visibility"
@@ -34,7 +34,7 @@ if [ -z "$alb_listener_arn" ]; then
   echo "    • Configure alb.listener_arn in the cloud-provider settings"
   echo "    • Or set ALB_LISTENER_ARN environment variable in Helm values"
   echo ""
-  exit 1
+  return 1
 fi
 
 echo "   ✅ alb_listener_arn=$alb_listener_arn"
@@ -83,7 +83,7 @@ if [ -z "$lambda_function_name" ]; then
   echo ""
   echo "   ❌ Lambda function name not found in context"
   echo ""
-  exit 1
+  return 1
 fi
 
 echo "   ✅ lambda_function_name=$lambda_function_name"

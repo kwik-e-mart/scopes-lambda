@@ -22,7 +22,7 @@ if ! command -v tofu &> /dev/null; then
   echo "   - Installation guide: https://opentofu.org/docs/intro/install/"
   echo "   - Verify with: which tofu"
   echo ""
-  exit 1
+  return 1
 fi
 
 tofu_version=$(tofu version 2>&1 | head -1)
@@ -31,14 +31,14 @@ echo "   ✅ tofu=$tofu_version"
 # Verify working directory has terraform files
 if [ ! -d "$TF_WORKING_DIR" ]; then
   echo "❌ Working directory does not exist: $TF_WORKING_DIR"
-  exit 1
+  return 1
 fi
 
 tf_file_count=$(ls "$TF_WORKING_DIR"/*.tf 2>/dev/null | wc -l | tr -d ' ')
 if [ "$tf_file_count" -eq 0 ]; then
   echo "❌ No .tf files found in $TF_WORKING_DIR"
   echo "   Did you run compose_modules first?"
-  exit 1
+  return 1
 fi
 
 echo "📋 Found $tf_file_count .tf files"

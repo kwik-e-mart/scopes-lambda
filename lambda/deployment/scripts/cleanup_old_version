@@ -12,7 +12,7 @@ if [ -z "${LAMBDA_FUNCTION_NAME:-}" ]; then
   echo "🔧 How to fix:" >&2
   echo "   - Ensure the scope has a valid Lambda function configured" >&2
   echo "   - Check that LAMBDA_FUNCTION_NAME is exported before this script runs" >&2
-  exit 1
+  return 1
 fi
 
 old_version=""
@@ -24,12 +24,12 @@ fi
 
 if [ -z "$old_version" ] || [ "$old_version" = "null" ] || [ "$old_version" = "" ]; then
   echo "   ⏭️  No previous version found to cleanup"
-  exit 0
+  return 0
 fi
 
 if [ "$old_version" = "\$LATEST" ] || [ "$old_version" = "1" ]; then
   echo "   ⏭️  Skipping deletion of version $old_version (protected)"
-  exit 0
+  return 0
 fi
 
 echo "   ✅ function_name=$LAMBDA_FUNCTION_NAME"

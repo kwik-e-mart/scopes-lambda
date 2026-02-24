@@ -12,7 +12,7 @@ if [ -z "${LAMBDA_FUNCTION_NAME:-}" ]; then
   echo "🔧 How to fix:" >&2
   echo "   - Ensure the scope has a valid Lambda function configured" >&2
   echo "   - Check that LAMBDA_FUNCTION_NAME is exported before this script runs" >&2
-  exit 1
+  return 1
 fi
 
 if [ -z "${DESIRED_TRAFFIC:-}" ]; then
@@ -23,7 +23,7 @@ if [ -z "${DESIRED_TRAFFIC:-}" ]; then
   echo "🔧 How to fix:" >&2
   echo "   - Ensure DESIRED_TRAFFIC is set (integer 0-100)" >&2
   echo "   - Check the deployment strategy configuration" >&2
-  exit 1
+  return 1
 fi
 
 alias_name="${LAMBDA_MAIN_ALIAS_NAME:-main}"
@@ -38,7 +38,7 @@ if [ -z "$new_version" ]; then
   echo "🔧 How to fix:" >&2
   echo "   - Ensure the build step publishes a new Lambda version" >&2
   echo "   - Check that LAMBDA_NEW_VERSION or LAMBDA_CURRENT_VERSION is set" >&2
-  exit 1
+  return 1
 fi
 
 echo "   ✅ function_name=$LAMBDA_FUNCTION_NAME"
@@ -52,7 +52,7 @@ if [ "$traffic_percentage" -lt 0 ] || [ "$traffic_percentage" -gt 100 ]; then
   echo "   - Invalid DESIRED_TRAFFIC value: $traffic_percentage" >&2
   echo "🔧 How to fix:" >&2
   echo "   - Set DESIRED_TRAFFIC to an integer between 0 and 100" >&2
-  exit 1
+  return 1
 fi
 
 echo ""
@@ -73,7 +73,7 @@ if [ $alias_exit_code -ne 0 ]; then
   echo "   - Verify alias exists: aws lambda get-alias --function-name $LAMBDA_FUNCTION_NAME --name $alias_name" >&2
   echo "   - Check the agent's IAM permissions include lambda:GetAlias" >&2
   echo "   📋 Error: $alias_config" >&2
-  exit 1
+  return 1
 fi
 
 current_version=$(echo "$alias_config" | jq -r '.FunctionVersion')
@@ -98,7 +98,7 @@ if [ "$traffic_percentage" -eq 100 ]; then
     echo "🔧 How to fix:" >&2
     echo "   - Check if version exists: aws lambda get-function --function-name $LAMBDA_FUNCTION_NAME --qualifier $new_version" >&2
     echo "   📋 Error: $update_output" >&2
-    exit 1
+    return 1
   fi
 
   echo "   ✅ Traffic switched to 100% on version $new_version"
@@ -132,7 +132,7 @@ else
     echo "   - Verify both versions exist on function $LAMBDA_FUNCTION_NAME" >&2
     echo "   - Check the agent's IAM permissions include lambda:UpdateAlias" >&2
     echo "   📋 Error: $update_output" >&2
-    exit 1
+    return 1
   fi
 
   echo "   ✅ Weighted routing configured: $current_version=$((100 - traffic_percentage))%, $new_version=$traffic_percentage%"
@@ -157,7 +157,7 @@ if [ -n "${WARMUP_ALIAS_NAME:-}" ]; then
     echo "🔧 How to fix:" >&2
     echo "   - Verify warm alias exists: aws lambda get-alias --function-name $LAMBDA_FUNCTION_NAME --name $WARMUP_ALIAS_NAME" >&2
     echo "   📋 Error: $warm_output" >&2
-    exit 1
+    return 1
   fi
 
   echo "   ✅ Warm alias $WARMUP_ALIAS_NAME updated to version $new_version"

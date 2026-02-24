@@ -17,7 +17,7 @@ if [ -z "$SCOPE_ID" ] || [ "$SCOPE_ID" = "null" ]; then
   echo "   - The scope object is missing from the context payload" >&2
   echo "🔧 How to fix:" >&2
   echo "   - Verify the CONTEXT environment variable contains valid JSON with .scope.id" >&2
-  exit 1
+  return 1
 fi
 
 if [ -z "$DEPLOYMENT_ID" ] || [ "$DEPLOYMENT_ID" = "null" ]; then
@@ -26,7 +26,7 @@ if [ -z "$DEPLOYMENT_ID" ] || [ "$DEPLOYMENT_ID" = "null" ]; then
   echo "   - CONTEXT variable is missing the deployment object" >&2
   echo "🔧 How to fix:" >&2
   echo "   - Verify the CONTEXT environment variable contains valid JSON with .deployment.id" >&2
-  exit 1
+  return 1
 fi
 
 echo "   ✅ scope_id=$SCOPE_ID"
@@ -254,7 +254,7 @@ if [ "$ASSET_TYPE" = "docker-image" ]; then
     echo "🔧 How to fix:" >&2
     echo "   - Verify the build pipeline pushes the image to ECR and sets asset.url" >&2
     echo "   - Expected format: {account}.dkr.ecr.{region}.amazonaws.com/{repo}:{tag}" >&2
-    exit 1
+    return 1
   fi
 else
   # Zip deployment (S3)
@@ -275,7 +275,7 @@ else
       echo "🔧 How to fix:" >&2
       echo "   - Verify the asset was uploaded correctly to S3" >&2
       echo "   - Expected format: s3://bucket-name/path/to/asset.zip" >&2
-      exit 1
+      return 1
     fi
   else
     echo "   ✅ asset_url=not provided (may be set later)"

@@ -20,7 +20,7 @@ if [ -z "$asset_url" ] || [ "$asset_url" = "null" ]; then
   echo "  🔧 How to fix:"
   echo "    • Ensure the application has a valid build that produces a Lambda deployment package"
   echo ""
-  exit 1
+  return 1
 fi
 
 echo "   ✅ asset_url=$asset_url"
@@ -42,7 +42,7 @@ else
   echo "  🔧 How to fix:"
   echo "    • Asset URL must be in S3 format (s3://bucket/key or https://bucket.s3.region.amazonaws.com/key)"
   echo ""
-  exit 1
+  return 1
 fi
 
 echo "   ✅ s3_bucket=$lambda_s3_bucket"
@@ -99,7 +99,7 @@ if [ "$vpc_enabled" = "true" ]; then
     echo "  🔧 How to fix:"
     echo "    • Configure networking.subnet_ids and networking.security_group_ids in the cloud-provider"
     echo ""
-    exit 1
+    return 1
   fi
 fi
 
@@ -146,7 +146,7 @@ if [ -z "$lambda_function_name" ] || [ "$lambda_function_name" = "null" ]; then
   echo "    • Scope was not created properly"
   echo "    • Lambda placeholder was not created during scope creation"
   echo ""
-  exit 1
+  return 1
 fi
 
 echo "   ✅ function_name=$lambda_function_name"
