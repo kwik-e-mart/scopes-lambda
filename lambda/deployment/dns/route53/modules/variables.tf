@@ -23,3 +23,9 @@ variable "dns_resource_tags_json" {
   type        = map(string)
   default     = {}
 }
+
+variable "dns_alb_host_header" {
+  description = "ALB DNS name for CNAME record; empty to skip ALB DNS record"
+  type        = string
+  default     = ""
+}

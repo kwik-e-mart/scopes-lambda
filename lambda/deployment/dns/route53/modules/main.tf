@@ -26,7 +26,7 @@ resource "aws_route53_record" "alb" {
 
   # For ALB, the target would come from the ALB configuration
   # This needs to be provided via context or as a variable
-  records = [try(local.alb_host_header, var.dns_full_domain)]
+  records = [var.dns_alb_host_header != "" ? var.dns_alb_host_header : var.dns_full_domain]
 
   lifecycle {
     # Allow external management if needed
