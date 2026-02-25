@@ -581,5 +581,9 @@ export MODULES_TO_USE
 export CONTEXT
 export RESOURCE_TAGS_JSON
 
+# Dump context to file for debugging
+echo "$CONTEXT" | jq '.' > "$OUTPUT_DIR/context.json"
+echo "   📄 Context dumped to $OUTPUT_DIR/context.json"
+
 echo ""
 echo "✨ Deployment context built successfully"
