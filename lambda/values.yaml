@@ -22,7 +22,7 @@ configuration:
 
   # Domain Configuration
   DOMAIN: "nullapps.io"
-  USE_ACCOUNT_SLUG: true
+  USE_ACCOUNT_SLUG: false
 
   # Lambda Agent Layer (for observability)
   USE_NULL_AGENT: true
