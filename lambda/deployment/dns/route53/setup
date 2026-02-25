@@ -112,9 +112,9 @@ TOFU_VARIABLES=$(echo "$TOFU_VARIABLES" | jq \
 # Configure API Gateway custom domain if API Gateway is being used
 api_gateway_name=$(echo "$TOFU_VARIABLES" | jq -r '.api_gateway_name // empty')
 if [ -n "$api_gateway_name" ]; then
-  cert_arn=$(echo "$CONTEXT" | jq -r '.providers["cloud-providers"].networking.certificate_arn // empty')
+  cert_arn="${CERTIFICATE_ARN:-}"
 
-  if [ -n "$cert_arn" ] && [ "$cert_arn" != "null" ]; then
+  if [ -n "$cert_arn" ]; then
     echo "   ✅ certificate_arn=$cert_arn"
     echo "   📝 Configuring API Gateway custom domain: $scope_domain"
 
@@ -127,7 +127,7 @@ if [ -n "$api_gateway_name" ]; then
         dns_use_api_gateway_cname: false
       }')
   else
-    echo "   ⚠️  No certificate_arn in cloud-provider context - using CNAME to execute-api endpoint"
+    echo "   ⚠️  CERTIFICATE_ARN not set - using CNAME to execute-api endpoint (no custom SSL)"
     TOFU_VARIABLES=$(echo "$TOFU_VARIABLES" | jq '. + {dns_use_api_gateway_cname: true}')
   fi
 fi
