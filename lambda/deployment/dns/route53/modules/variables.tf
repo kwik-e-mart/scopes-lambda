@@ -35,3 +35,9 @@ variable "dns_use_api_gateway_cname" {
   type        = bool
   default     = false
 }
+
+variable "dns_use_api_gateway" {
+  description = "Whether to create an A alias record for API Gateway with custom domain"
+  type        = bool
+  default     = false
+}

@@ -124,6 +124,7 @@ if [ -n "$api_gateway_name" ]; then
       '. + {
         api_gateway_custom_domain: $domain,
         api_gateway_certificate_arn: $cert,
+        dns_use_api_gateway: true,
         dns_use_api_gateway_cname: false
       }')
   else
