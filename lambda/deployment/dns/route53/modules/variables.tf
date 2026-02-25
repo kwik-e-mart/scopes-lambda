@@ -29,3 +29,9 @@ variable "dns_alb_host_header" {
   type        = string
   default     = ""
 }
+
+variable "dns_use_api_gateway_cname" {
+  description = "Whether to create a CNAME record to the API Gateway default endpoint (no custom domain)"
+  type        = bool
+  default     = false
+}

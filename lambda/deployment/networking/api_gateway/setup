@@ -64,6 +64,8 @@ echo "   ✅ lambda_function_name=$lambda_function_name"
 
 RESOURCE_TAGS_JSON=${RESOURCE_TAGS_JSON:-"{}"}
 
+use_cname=$( [ -z "$custom_domain" ] && echo "true" || echo "false" )
+
 TOFU_VARIABLES=$(echo "$TOFU_VARIABLES" | jq \
   --arg api_name "$api_gateway_name" \
   --arg stage_name "$stage_name" \
@@ -72,6 +74,7 @@ TOFU_VARIABLES=$(echo "$TOFU_VARIABLES" | jq \
   --arg custom_domain "$custom_domain" \
   --arg certificate_arn "$certificate_arn" \
   --argjson resource_tags_json "$RESOURCE_TAGS_JSON" \
+  --argjson use_cname "$use_cname" \
   '. + {
     api_gateway_name: $api_name,
     api_gateway_stage_name: $stage_name,
@@ -79,7 +82,8 @@ TOFU_VARIABLES=$(echo "$TOFU_VARIABLES" | jq \
     api_gateway_throttling_rate_limit: $rate_limit,
     api_gateway_custom_domain: $custom_domain,
     api_gateway_certificate_arn: $certificate_arn,
-    api_gateway_resource_tags_json: $resource_tags_json
+    api_gateway_resource_tags_json: $resource_tags_json,
+    dns_use_api_gateway_cname: $use_cname
   }')
 
 echo ""

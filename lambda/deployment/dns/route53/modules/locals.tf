@@ -8,9 +8,9 @@ locals {
   dns_api_gateway_zone       = try(local.api_gateway_target_zone_id, "")
 
   # API Gateway without custom domain -> CNAME to default endpoint (strip https://)
-  dns_api_gateway_raw_endpoint  = try(local.api_gateway_endpoint, "")
-  dns_use_api_gateway_cname     = !local.dns_use_api_gateway && local.dns_api_gateway_raw_endpoint != ""
-  dns_api_gateway_cname_target  = replace(local.dns_api_gateway_raw_endpoint, "https://", "")
+  # count must be known at plan time, so we use a variable set by api_gateway/setup
+  dns_use_api_gateway_cname    = var.dns_use_api_gateway_cname
+  dns_api_gateway_cname_target = replace(try(local.api_gateway_endpoint, ""), "https://", "")
 
   # Cross-module outputs
   dns_record_name = var.dns_full_domain
