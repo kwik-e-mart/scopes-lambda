@@ -91,7 +91,7 @@ scope_domain="${network_subdomain}.${network_domain}"
 echo "   ✅ full_domain=$scope_domain"
 
 # Determine the DNS target based on visibility
-visibility=$(echo "$CONTEXT" | jq -r '.scope.visibility // "public"')
+visibility=$(echo "$CONTEXT" | jq -r '.scope.capabilities.visibility // "public"')
 
 # These will be set by the networking layer via terraform locals
 # For API Gateway: api_gateway_target_domain, api_gateway_target_zone_id

@@ -3,7 +3,7 @@
 echo "🔍 Validating API Gateway configuration..."
 
 # Check visibility - API Gateway is only for public scopes
-visibility=$(echo "$CONTEXT" | jq -r '.scope.visibility // "public"')
+visibility=$(echo "$CONTEXT" | jq -r '.scope.capabilities.visibility // "public"')
 
 if [ "$visibility" != "public" ]; then
   echo ""

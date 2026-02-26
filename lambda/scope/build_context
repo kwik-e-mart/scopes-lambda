@@ -52,7 +52,7 @@ LAMBDA_FUNCTION_NAME="${LAMBDA_FUNCTION_NAME:0:64}"
 echo "   ✅ function_name=$LAMBDA_FUNCTION_NAME"
 
 #Visibility
-VISIBILITY=$(echo "$CONTEXT" | jq -r '.scope.visibility // "public"')
+VISIBILITY=$(echo "$CONTEXT" | jq -r '.scope.capabilities.visibility // "public"')
 echo "   ✅ visibility=$VISIBILITY"
 
 #Lambda capabilities (runtime, handler, architecture)

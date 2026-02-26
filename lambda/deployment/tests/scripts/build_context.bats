@@ -40,7 +40,7 @@ teardown() {
   set_context "minimal"
 
   local visibility
-  visibility=$(echo "$CONTEXT" | jq -r '.scope.visibility // "public"')
+  visibility=$(echo "$CONTEXT" | jq -r '.scope.capabilities.visibility // "public"')
 
   assert_equal "$visibility" "public"
 }
@@ -49,7 +49,7 @@ teardown() {
   set_context "private"
 
   local visibility
-  visibility=$(echo "$CONTEXT" | jq -r '.scope.visibility // "public"')
+  visibility=$(echo "$CONTEXT" | jq -r '.scope.capabilities.visibility // "public"')
 
   assert_equal "$visibility" "private"
 }
@@ -59,7 +59,7 @@ teardown() {
   set_context "public"
 
   local visibility
-  visibility=$(echo "$CONTEXT" | jq -r '.scope.visibility // "public"')
+  visibility=$(echo "$CONTEXT" | jq -r '.scope.capabilities.visibility // "public"')
 
   assert_equal "$visibility" "public"
 }
@@ -68,7 +68,7 @@ teardown() {
   set_context "private"
 
   local visibility
-  visibility=$(echo "$CONTEXT" | jq -r '.scope.visibility // "public"')
+  visibility=$(echo "$CONTEXT" | jq -r '.scope.capabilities.visibility // "public"')
 
   assert_equal "$visibility" "private"
 }

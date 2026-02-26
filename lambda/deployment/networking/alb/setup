@@ -3,7 +3,7 @@
 echo "🔍 Validating ALB configuration..."
 
 # Check visibility - ALB is only for private scopes
-visibility=$(echo "$CONTEXT" | jq -r '.scope.visibility // "public"')
+visibility=$(echo "$CONTEXT" | jq -r '.scope.capabilities.visibility // "public"')
 
 if [ "$visibility" != "private" ] && [ "$visibility" != "internal" ]; then
   echo ""
