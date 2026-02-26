@@ -126,7 +126,7 @@ if [ -n "$LAMBDA_BLUE_VERSION" ]; then
 fi
 
 # Get visibility to determine networking layer
-VISIBILITY=$(echo "$CONTEXT" | jq -r '.scope.visibility // "public"')
+VISIBILITY=$(echo "$CONTEXT" | jq -r '.scope.capabilities.visibility // "public"')
 echo "   ✅ visibility=$VISIBILITY"
 
 echo "   ✅ strategy=$DEPLOYMENT_STRATEGY"
