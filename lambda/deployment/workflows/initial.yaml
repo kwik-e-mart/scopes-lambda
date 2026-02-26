@@ -70,6 +70,14 @@ steps:
         type: environment
       - name: MODULES_TO_USE
         type: environment
+  - name: setup_dns
+    type: script
+    file: "$SERVICE_PATH/deployment/dns/route53/setup"
+    output:
+      - name: TOFU_VARIABLES
+        type: environment
+      - name: MODULES_TO_USE
+        type: environment
   - name: setup_networking
     type: workflow
     steps:
@@ -89,14 +97,6 @@ steps:
             type: environment
           - name: MODULES_TO_USE
             type: environment
-  - name: setup_dns
-    type: script
-    file: "$SERVICE_PATH/deployment/dns/route53/setup"
-    output:
-      - name: TOFU_VARIABLES
-        type: environment
-      - name: MODULES_TO_USE
-        type: environment
   - name: compose_modules
     type: script
     file: "$SERVICE_PATH/deployment/compose_modules"

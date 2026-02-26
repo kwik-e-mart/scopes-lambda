@@ -51,12 +51,14 @@ target_group_name="${target_group_name:0:32}"
 echo "   ✅ target_group_name=$target_group_name"
 
 # Host header for routing
-scope_domain=$(echo "$CONTEXT" | jq -r '.scope.domain // empty')
-if [ -z "$scope_domain" ] || [ "$scope_domain" = "null" ]; then
-  # Generate a default host header pattern
-  host_header="${application_slug}-${scope_slug}.internal"
-else
-  host_header="$scope_domain"
+# Prefer dns_full_domain from TOFU_VARIABLES (set by setup_dns which runs before setup_networking).
+# Fall back to scope.domain from context (set on previous deployments), then a generated pattern.
+host_header=$(echo "$TOFU_VARIABLES" | jq -r '.dns_full_domain // empty')
+if [ -z "$host_header" ] || [ "$host_header" = "null" ]; then
+  host_header=$(echo "$CONTEXT" | jq -r '.scope.domain // empty')
+fi
+if [ -z "$host_header" ] || [ "$host_header" = "null" ]; then
+  host_header="${namespace_slug}-${application_slug}-${scope_slug}.internal"
 fi
 echo "   ✅ host_header=$host_header"
 

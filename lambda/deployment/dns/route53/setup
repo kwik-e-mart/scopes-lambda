@@ -3,15 +3,29 @@
 echo "🔍 Validating Route53 DNS configuration..."
 
 # Get hosted zone ID from context
-hosted_zone_id=$(echo "$CONTEXT" | jq -r '.providers["cloud-providers"].networking.hosted_public_zone_id // empty')
+# For private/internal scopes, prefer hosted_private_zone_id if available; fall back to public zone.
+visibility=$(echo "$CONTEXT" | jq -r '.scope.capabilities.visibility // "public"')
+
+if [ "$visibility" = "private" ] || [ "$visibility" = "internal" ]; then
+  hosted_zone_id=$(echo "$CONTEXT" | jq -r '.providers["cloud-providers"].networking.hosted_private_zone_id // empty')
+  if [ -n "$hosted_zone_id" ] && [ "$hosted_zone_id" != "null" ]; then
+    echo "   ✅ Using private hosted zone (visibility=$visibility)"
+  else
+    # Fall back to public zone if no private zone is configured
+    hosted_zone_id=$(echo "$CONTEXT" | jq -r '.providers["cloud-providers"].networking.hosted_public_zone_id // empty')
+    echo "   ⚠️  No hosted_private_zone_id configured, falling back to public zone"
+  fi
+else
+  hosted_zone_id=$(echo "$CONTEXT" | jq -r '.providers["cloud-providers"].networking.hosted_public_zone_id // empty')
+fi
 
 if [ -z "$hosted_zone_id" ] || [ "$hosted_zone_id" = "null" ]; then
   echo ""
-  echo "   ❌ hosted_public_zone_id is not set in context"
+  echo "   ❌ No hosted zone ID configured"
   echo ""
   echo "  🔧 How to fix:"
   echo "    1. Ensure there is an AWS cloud-provider configured at the correct NRN hierarchy level"
-  echo "    2. Set the 'hosted_public_zone_id' field with the Route 53 hosted zone ID"
+  echo "    2. Set 'hosted_public_zone_id' (public scopes) or 'hosted_private_zone_id' (private/internal scopes)"
   echo ""
   return 1
 fi
