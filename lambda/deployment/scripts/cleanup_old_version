@@ -18,8 +18,8 @@ fi
 old_version=""
 
 if [ -n "${SCOPE_NRN:-}" ]; then
-  nrn_output=$(np nrn read --nrn "$SCOPE_NRN" --namespace aws --format json 2>&1 || echo "{}")
-  old_version=$(echo "$nrn_output" | jq -r '.LAMBDA_FUNCTION_PREVIOUS_VERSION // ""')
+  nrn_output=$(np nrn read --nrn "$SCOPE_NRN" --ids "lambda.lambda_function_previous_version" --format json 2>&1 || echo "{}")
+  old_version=$(echo "$nrn_output" | jq -r '.namespaces.lambda.lambda_function_previous_version // ""')
 fi
 
 if [ -z "$old_version" ] || [ "$old_version" = "null" ] || [ "$old_version" = "" ]; then

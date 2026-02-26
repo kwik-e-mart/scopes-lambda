@@ -15,7 +15,7 @@ if [ -z "${LAMBDA_FUNCTION_NAME:-}" ]; then
   return 1
 fi
 
-new_version="${LAMBDA_NEW_VERSION:-}"
+new_version="${LAMBDA_NEW_VERSION:-${LAMBDA_CURRENT_VERSION:-}}"
 
 if [ -z "$new_version" ] || [ "$new_version" = "null" ]; then
   echo "   ⏭️  No new version specified to cleanup"

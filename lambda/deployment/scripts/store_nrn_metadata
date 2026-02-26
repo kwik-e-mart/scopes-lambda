@@ -42,18 +42,18 @@ if [ -n "${LAMBDA_FUNCTION_ARN:-}" ]; then
   echo "   ✅ function_arn=$LAMBDA_FUNCTION_ARN"
 fi
 
-if [ -n "${LAMBDA_FUNCTION_VERSION:-}" ]; then
+if [ -n "${LAMBDA_CURRENT_VERSION:-}" ]; then
   metadata=$(echo "$metadata" | jq \
-    --arg ver "$LAMBDA_FUNCTION_VERSION" \
+    --arg ver "$LAMBDA_CURRENT_VERSION" \
     '. + {lambda_function_current_version: $ver}')
-  echo "   ✅ current_version=$LAMBDA_FUNCTION_VERSION"
+  echo "   ✅ current_version=$LAMBDA_CURRENT_VERSION"
 fi
 
-if [ -n "${LAMBDA_NEW_VERSION:-}" ]; then
+if [ -n "${LAMBDA_PREVIOUS_VERSION:-}" ]; then
   metadata=$(echo "$metadata" | jq \
-    --arg ver "$LAMBDA_NEW_VERSION" \
-    '. + {lambda_function_new_version: $ver}')
-  echo "   ✅ new_version=$LAMBDA_NEW_VERSION"
+    --arg ver "$LAMBDA_PREVIOUS_VERSION" \
+    '. + {lambda_function_previous_version: $ver}')
+  echo "   ✅ previous_version=$LAMBDA_PREVIOUS_VERSION"
 fi
 
 if [ -n "${LAMBDA_ALIAS_NAME:-}" ]; then

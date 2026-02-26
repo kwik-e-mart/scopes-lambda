@@ -15,6 +15,10 @@ steps:
         type: environment
       - name: LAMBDA_FUNCTION_NAME
         type: environment
+      - name: LAMBDA_CURRENT_VERSION
+        type: environment
+      - name: LAMBDA_PREVIOUS_VERSION
+        type: environment
       - name: VISIBILITY
         type: environment
       - name: OUTPUT_DIR

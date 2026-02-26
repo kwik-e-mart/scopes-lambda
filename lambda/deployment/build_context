@@ -62,6 +62,7 @@ echo "   📡 Reading Lambda metadata from NRN..."
 LAMBDA_FUNCTION_ARN=""
 LAMBDA_ROLE_ARN=""
 LAMBDA_CURRENT_VERSION=""
+LAMBDA_PREVIOUS_VERSION=""
 LAMBDA_MAIN_ALIAS_NAME="${LAMBDA_MAIN_ALIAS_NAME:-main}"
 
 nrn_output=$(np nrn read --nrn "$SCOPE_NRN" --ids "lambda.lambda_function_arn,lambda.lambda_role_arn,lambda.lambda_function_current_version,lambda.lambda_function_main_alias,lambda.lambda_current_reserved_concurrency_type,lambda.lambda_current_reserved_concurrency_value,lambda.lambda_current_provisioned_concurrency_type,lambda.lambda_current_provisioned_concurrency_value" --format json 2>&1 || echo "{}")
@@ -70,6 +71,8 @@ if [ "$nrn_output" != "{}" ]; then
   LAMBDA_FUNCTION_ARN=$(echo "$nrn_output" | jq -r '.namespaces.lambda.lambda_function_arn // ""')
   LAMBDA_ROLE_ARN=$(echo "$nrn_output" | jq -r '.namespaces.lambda.lambda_role_arn // ""')
   LAMBDA_CURRENT_VERSION=$(echo "$nrn_output" | jq -r '.namespaces.lambda.lambda_function_current_version // ""')
+  # Capture the pre-deploy running version as previous before do_tofu overwrites LAMBDA_CURRENT_VERSION
+  LAMBDA_PREVIOUS_VERSION="$LAMBDA_CURRENT_VERSION"
   stored_alias=$(echo "$nrn_output" | jq -r '.namespaces.lambda.lambda_function_main_alias // ""')
   if [ -n "$stored_alias" ] && [ "$stored_alias" != "null" ]; then
     LAMBDA_MAIN_ALIAS_NAME="$stored_alias"
@@ -532,6 +535,7 @@ export LAMBDA_FUNCTION_NAME
 export LAMBDA_FUNCTION_ARN
 export LAMBDA_ROLE_ARN
 export LAMBDA_CURRENT_VERSION
+export LAMBDA_PREVIOUS_VERSION
 export LAMBDA_MAIN_ALIAS_NAME
 export VISIBILITY
 export DEPLOYMENT_STRATEGY
