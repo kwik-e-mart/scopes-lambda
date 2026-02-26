@@ -25,23 +25,18 @@ resource "aws_route53_record" "api_gateway_cname" {
   records = [local.dns_api_gateway_cname_target]
 }
 
-# DNS Record for ALB (when not using API Gateway)
-# Note: For ALB, we typically need the ALB DNS name passed via context
-# This is a placeholder - actual implementation depends on how ALB domain is provided
+# DNS A alias record for ALB (private/internal scopes)
+# Triggered by the ALB module's cross-module local alb_dns_name (non-empty when ALB is composed).
 resource "aws_route53_record" "alb" {
-  count = var.dns_alb_host_header != "" ? 1 : 0
+  count = local.dns_alb_dns_name != "" ? 1 : 0
 
   zone_id = var.dns_hosted_zone_id
   name    = var.dns_full_domain
-  type    = "CNAME"
-  ttl     = 300
+  type    = "A"
 
-  # For ALB, the target would come from the ALB configuration
-  # This needs to be provided via context or as a variable
-  records = [var.dns_alb_host_header != "" ? var.dns_alb_host_header : var.dns_full_domain]
-
-  lifecycle {
-    # Allow external management if needed
-    ignore_changes = [records]
+  alias {
+    name                   = local.dns_alb_dns_name
+    zone_id                = local.dns_alb_zone_id
+    evaluate_target_health = true
   }
 }
