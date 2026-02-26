@@ -137,3 +137,9 @@ variable "lambda_publish" {
   type        = bool
   default     = true
 }
+
+variable "lambda_description" {
+  description = "Description embedded in each published version; used to look up the version by deployment ID"
+  type        = string
+  default     = ""
+}

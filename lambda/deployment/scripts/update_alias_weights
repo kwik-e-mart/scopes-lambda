@@ -27,14 +27,14 @@ if [ -z "${DESIRED_TRAFFIC:-}" ]; then
 fi
 
 alias_name="${LAMBDA_MAIN_ALIAS_NAME:-main}"
-new_version="${LAMBDA_NEW_VERSION:-$LAMBDA_CURRENT_VERSION}"
+new_version="${LAMBDA_GREEN_VERSION:-${LAMBDA_NEW_VERSION:-$LAMBDA_CURRENT_VERSION}}"
 traffic_percentage="$DESIRED_TRAFFIC"
 
 if [ -z "$new_version" ]; then
-  echo "❌ No version specified - both LAMBDA_NEW_VERSION and LAMBDA_CURRENT_VERSION are empty" >&2
+  echo "❌ No green version found - LAMBDA_GREEN_VERSION, LAMBDA_NEW_VERSION and LAMBDA_CURRENT_VERSION are all empty" >&2
   echo "💡 Possible causes:" >&2
   echo "   - Deployment did not publish a new Lambda version" >&2
-  echo "   - NRN metadata is missing version information" >&2
+  echo "   - NRN metadata is missing version information for deployment $DEPLOYMENT_ID" >&2
   echo "🔧 How to fix:" >&2
   echo "   - Ensure the build step publishes a new Lambda version" >&2
   echo "   - Check that LAMBDA_NEW_VERSION or LAMBDA_CURRENT_VERSION is set" >&2
@@ -78,6 +78,16 @@ fi
 
 current_version=$(echo "$alias_config" | jq -r '.FunctionVersion')
 echo "   ✅ current_version=$current_version"
+
+# If the alias already points to the new version at 100%, nothing to do.
+# This can happen if finalize was already run, or the alias was updated externally.
+if [ "$current_version" = "$new_version" ]; then
+  echo ""
+  echo "   ✅ Alias already pointing to version $new_version at 100% - no traffic switch needed"
+  echo ""
+  echo "✨ Traffic switch skipped (already on target version $new_version)"
+  return 0
+fi
 
 # $LATEST cannot be used as a base for weighted routing (AWS limitation).
 # This happens on the first real deployment when the placeholder alias targets $LATEST.

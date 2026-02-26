@@ -171,6 +171,7 @@ TOFU_VARIABLES=$(echo "$TOFU_VARIABLES" | jq \
   --argjson provisioned_value "$provisioned_value" \
   --arg main_alias_name "$main_alias_name" \
   --arg warmup_alias_name "$warmup_alias" \
+  --arg lambda_description "$deployment_id" \
   '. + {
     lambda_function_name: $function_name,
     lambda_runtime: $runtime,
@@ -189,7 +190,8 @@ TOFU_VARIABLES=$(echo "$TOFU_VARIABLES" | jq \
     lambda_provisioned_concurrency_type: $provisioned_type,
     lambda_provisioned_concurrency_value: $provisioned_value,
     lambda_main_alias_name: $main_alias_name,
-    lambda_warmup_alias_name: $warmup_alias_name
+    lambda_warmup_alias_name: $warmup_alias_name,
+    lambda_description: $lambda_description
   }')
 
 echo ""

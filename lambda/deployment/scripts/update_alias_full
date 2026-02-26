@@ -16,16 +16,16 @@ if [ -z "${LAMBDA_FUNCTION_NAME:-}" ]; then
 fi
 
 alias_name="${LAMBDA_MAIN_ALIAS_NAME:-main}"
-new_version="${LAMBDA_NEW_VERSION:-$LAMBDA_CURRENT_VERSION}"
+new_version="${LAMBDA_GREEN_VERSION:-${LAMBDA_NEW_VERSION:-$LAMBDA_CURRENT_VERSION}}"
 
 if [ -z "$new_version" ]; then
-  echo "❌ No version specified - both LAMBDA_NEW_VERSION and LAMBDA_CURRENT_VERSION are empty" >&2
+  echo "❌ No green version found - LAMBDA_GREEN_VERSION, LAMBDA_NEW_VERSION and LAMBDA_CURRENT_VERSION are all empty" >&2
   echo "💡 Possible causes:" >&2
   echo "   - Deployment did not publish a new Lambda version" >&2
-  echo "   - NRN metadata is missing version information" >&2
+  echo "   - NRN metadata is missing version information for deployment $DEPLOYMENT_ID" >&2
   echo "🔧 How to fix:" >&2
   echo "   - Ensure the build step publishes a new Lambda version" >&2
-  echo "   - Check that LAMBDA_NEW_VERSION or LAMBDA_CURRENT_VERSION is set" >&2
+  echo "   - Check that LAMBDA_GREEN_VERSION is set and NRN has the deployment version" >&2
   return 1
 fi
 
