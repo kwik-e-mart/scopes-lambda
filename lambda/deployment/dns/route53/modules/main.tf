@@ -7,8 +7,8 @@ resource "aws_route53_record" "api_gateway" {
   type    = "A"
 
   alias {
-    name                   = local.dns_api_gateway_target
-    zone_id                = local.dns_api_gateway_zone
+    name                   = local.dns_api_gateway_target != "" ? local.dns_api_gateway_target : "placeholder.invalid"
+    zone_id                = local.dns_api_gateway_zone != "" ? local.dns_api_gateway_zone : "Z1D633PJN98FT9"
     evaluate_target_health = false
   }
 }
@@ -35,8 +35,8 @@ resource "aws_route53_record" "alb" {
   type    = "A"
 
   alias {
-    name                   = local.dns_alb_dns_name
-    zone_id                = local.dns_alb_zone_id
+    name                   = local.dns_alb_dns_name != "" ? local.dns_alb_dns_name : "placeholder.invalid"
+    zone_id                = local.dns_alb_zone_id != "" ? local.dns_alb_zone_id : "Z1D633PJN98FT9"
     evaluate_target_health = true
   }
 }
