@@ -79,6 +79,33 @@ fi
 current_version=$(echo "$alias_config" | jq -r '.FunctionVersion')
 echo "   ✅ current_version=$current_version"
 
+# $LATEST cannot be used as a base for weighted routing (AWS limitation).
+# This happens on the first real deployment when the placeholder alias targets $LATEST.
+# In this case, skip gradual rollout and switch 100% directly to the new version.
+if [ "$current_version" = '$LATEST' ]; then
+  echo ""
+  echo "   ⚠️  Alias points to \$LATEST - weighted routing not supported by AWS"
+  echo "   📝 Switching 100% to version $new_version (first blue-green deployment)"
+
+  update_output=$(aws lambda update-alias \
+    --function-name "$LAMBDA_FUNCTION_NAME" \
+    --name "$alias_name" \
+    --function-version "$new_version" \
+    --routing-config '{}' 2>&1)
+  update_exit_code=$?
+
+  if [ $update_exit_code -ne 0 ]; then
+    echo "❌ Failed to switch alias from \$LATEST to version $new_version" >&2
+    echo "   📋 Error: $update_output" >&2
+    return 1
+  fi
+
+  echo "   ✅ Alias updated from \$LATEST to 100% on version $new_version"
+  echo ""
+  echo "✨ Traffic switch completed (forced 100% - was on \$LATEST)"
+  return 0
+fi
+
 if [ "$traffic_percentage" -eq 100 ]; then
   echo ""
   echo "   📝 Switching 100% traffic to version $new_version on alias $alias_name..."
