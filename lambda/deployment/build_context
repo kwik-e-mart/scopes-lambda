@@ -101,12 +101,12 @@ _versions_raw=$(aws lambda list-versions-by-function \
 
 LAMBDA_GREEN_VERSION=$(echo "$_versions_raw" | jq -r \
   --arg id "$DEPLOYMENT_ID" \
-  '[.Versions // [] | .[] | select(.Description == $id) | .Version] | first // ""')
+  '[.Versions // [] | .[] | select(.Description == $id) | .Version | select(test("^[0-9]+$"))] | last // ""')
 
 if [ -n "$BLUE_DEPLOYMENT_ID" ]; then
   LAMBDA_BLUE_VERSION=$(echo "$_versions_raw" | jq -r \
     --arg id "$BLUE_DEPLOYMENT_ID" \
-    '[.Versions // [] | .[] | select(.Description == $id) | .Version] | first // ""')
+    '[.Versions // [] | .[] | select(.Description == $id) | .Version | select(test("^[0-9]+$"))] | last // ""')
 fi
 
 # LAMBDA_CURRENT_VERSION: set from green version or will be overwritten by do_tofu output
