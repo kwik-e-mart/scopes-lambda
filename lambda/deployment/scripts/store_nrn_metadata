@@ -2,7 +2,9 @@
 # Store Lambda deployment metadata in NRN
 # This script persists Lambda function details for future deployments
 
-echo "📝 Storing deployment metadata in NRN..."
+source "$SERVICE_PATH/utils/log"
+
+log info "📝 Storing deployment metadata in NRN..."
 
 if [ -z "${SCOPE_NRN:-}" ]; then
   echo "❌ SCOPE_NRN is required" >&2
@@ -26,8 +28,8 @@ if [ -z "${LAMBDA_FUNCTION_NAME:-}" ]; then
   return 1
 fi
 
-echo "   ✅ scope_nrn=$SCOPE_NRN"
-echo "   ✅ function_name=$LAMBDA_FUNCTION_NAME"
+log debug "   ✅ scope_nrn=$SCOPE_NRN"
+log debug "   ✅ function_name=$LAMBDA_FUNCTION_NAME"
 
 metadata="{}"
 
@@ -39,106 +41,106 @@ if [ -n "${LAMBDA_FUNCTION_ARN:-}" ]; then
   metadata=$(echo "$metadata" | jq \
     --arg arn "$LAMBDA_FUNCTION_ARN" \
     '. + {lambda_function_arn: $arn}')
-  echo "   ✅ function_arn=$LAMBDA_FUNCTION_ARN"
+  log debug "   ✅ function_arn=$LAMBDA_FUNCTION_ARN"
 fi
 
 if [ -n "${LAMBDA_ALIAS_NAME:-}" ]; then
   metadata=$(echo "$metadata" | jq \
     --arg alias "$LAMBDA_ALIAS_NAME" \
     '. + {lambda_function_main_alias: $alias}')
-  echo "   ✅ main_alias=$LAMBDA_ALIAS_NAME"
+  log debug "   ✅ main_alias=$LAMBDA_ALIAS_NAME"
 fi
 
 if [ -n "${LAMBDA_ROLE_ARN:-}" ]; then
   metadata=$(echo "$metadata" | jq \
     --arg role "$LAMBDA_ROLE_ARN" \
     '. + {lambda_role_arn: $role}')
-  echo "   ✅ role_arn=$LAMBDA_ROLE_ARN"
+  log debug "   ✅ role_arn=$LAMBDA_ROLE_ARN"
 fi
 
 if [ -n "${API_GATEWAY_ID:-}" ]; then
   metadata=$(echo "$metadata" | jq \
     --arg api "$API_GATEWAY_ID" \
     '. + {apigateway_http_api_id: $api}')
-  echo "   ✅ api_gateway_id=$API_GATEWAY_ID"
+  log debug "   ✅ api_gateway_id=$API_GATEWAY_ID"
 fi
 
 if [ -n "${SCOPE_DOMAIN:-}" ]; then
   metadata=$(echo "$metadata" | jq \
     --arg domain "$SCOPE_DOMAIN" \
     '. + {scope_domain: $domain}')
-  echo "   ✅ scope_domain=$SCOPE_DOMAIN"
+  log debug "   ✅ scope_domain=$SCOPE_DOMAIN"
 fi
 
 if [ -n "${LAMBDA_CURRENT_RESERVED_CONCURRENCY_TYPE:-}" ]; then
   metadata=$(echo "$metadata" | jq \
     --arg val "$LAMBDA_CURRENT_RESERVED_CONCURRENCY_TYPE" \
     '. + {lambda_current_reserved_concurrency_type: $val}')
-  echo "   ✅ reserved_concurrency_type=$LAMBDA_CURRENT_RESERVED_CONCURRENCY_TYPE"
+  log debug "   ✅ reserved_concurrency_type=$LAMBDA_CURRENT_RESERVED_CONCURRENCY_TYPE"
 fi
 
 if [ -n "${LAMBDA_CURRENT_RESERVED_CONCURRENCY_VALUE:-}" ]; then
   metadata=$(echo "$metadata" | jq \
     --arg val "$LAMBDA_CURRENT_RESERVED_CONCURRENCY_VALUE" \
     '. + {lambda_current_reserved_concurrency_value: $val}')
-  echo "   ✅ reserved_concurrency_value=$LAMBDA_CURRENT_RESERVED_CONCURRENCY_VALUE"
+  log debug "   ✅ reserved_concurrency_value=$LAMBDA_CURRENT_RESERVED_CONCURRENCY_VALUE"
 fi
 
 if [ -n "${LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_TYPE:-}" ]; then
   metadata=$(echo "$metadata" | jq \
     --arg val "$LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_TYPE" \
     '. + {lambda_current_provisioned_concurrency_type: $val}')
-  echo "   ✅ provisioned_concurrency_type=$LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_TYPE"
+  log debug "   ✅ provisioned_concurrency_type=$LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_TYPE"
 fi
 
 if [ -n "${LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_VALUE:-}" ]; then
   metadata=$(echo "$metadata" | jq \
     --arg val "$LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_VALUE" \
     '. + {lambda_current_provisioned_concurrency_value: $val}')
-  echo "   ✅ provisioned_concurrency_value=$LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_VALUE"
+  log debug "   ✅ provisioned_concurrency_value=$LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_VALUE"
 fi
 
 if [ -n "${APIGATEWAY_HTTP_API_SCOPE_MAPPING_ID:-}" ]; then
   metadata=$(echo "$metadata" | jq \
     --arg val "$APIGATEWAY_HTTP_API_SCOPE_MAPPING_ID" \
     '. + {apigateway_http_api_scope_mapping_id: $val}')
-  echo "   ✅ api_scope_mapping_id=$APIGATEWAY_HTTP_API_SCOPE_MAPPING_ID"
+  log debug "   ✅ api_scope_mapping_id=$APIGATEWAY_HTTP_API_SCOPE_MAPPING_ID"
 fi
 
 if [ -n "${CURRENT_TARGET_GROUP_ARN:-}" ]; then
   metadata=$(echo "$metadata" | jq \
     --arg val "$CURRENT_TARGET_GROUP_ARN" \
     '. + {current_target_group_arn: $val}')
-  echo "   ✅ target_group_arn=$CURRENT_TARGET_GROUP_ARN"
+  log debug "   ✅ target_group_arn=$CURRENT_TARGET_GROUP_ARN"
 fi
 
 if [ -n "${ALB_RULE_ARN:-}" ]; then
   metadata=$(echo "$metadata" | jq \
     --arg val "$ALB_RULE_ARN" \
     '. + {alb_rule_arn: $val}')
-  echo "   ✅ alb_rule_arn=$ALB_RULE_ARN"
+  log debug "   ✅ alb_rule_arn=$ALB_RULE_ARN"
 fi
 
 if [ -n "${ALB_RULE_PRIORITY:-}" ]; then
   metadata=$(echo "$metadata" | jq \
     --argjson val "$ALB_RULE_PRIORITY" \
     '. + {alb_rule_priority: $val}')
-  echo "   ✅ alb_rule_priority=$ALB_RULE_PRIORITY"
+  log debug "   ✅ alb_rule_priority=$ALB_RULE_PRIORITY"
 fi
 
 if [ -n "${WARMUP_ALIAS_NAME:-}" ]; then
   metadata=$(echo "$metadata" | jq \
     --arg val "$WARMUP_ALIAS_NAME" \
     '. + {lambda_function_warm_alias: $val}')
-  echo "   ✅ warm_alias=$WARMUP_ALIAS_NAME"
+  log debug "   ✅ warm_alias=$WARMUP_ALIAS_NAME"
 fi
 
 echo ""
-echo "   📡 Writing metadata to NRN=$SCOPE_NRN..."
+log info "   📡 Writing metadata to NRN=$SCOPE_NRN..."
 
 # Prefix all keys with "lambda." namespace
 metadata=$(echo "$metadata" | jq 'with_entries(.key = "lambda." + .key)')
-echo "   ✅ Final metadata payload: $metadata"
+log debug "   ✅ Final metadata payload: $metadata"
 
 np_output=$(np nrn patch \
   --nrn "$SCOPE_NRN" \
@@ -160,6 +162,6 @@ if [ $np_exit_code -ne 0 ]; then
   return 1
 fi
 
-echo "   ✅ Metadata stored successfully"
+log debug "   ✅ Metadata stored successfully"
 echo ""
-echo "✨ NRN metadata saved for scope=$SCOPE_NRN function=$LAMBDA_FUNCTION_NAME"
+log info "✨ NRN metadata saved for scope=$SCOPE_NRN function=$LAMBDA_FUNCTION_NAME"

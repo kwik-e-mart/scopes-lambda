@@ -1,13 +1,15 @@
 #!/bin/bash
 
-echo "🔍 Validating API Gateway configuration..."
+source "$SERVICE_PATH/utils/log"
+
+log info "🔍 Validating API Gateway configuration..."
 
 # Check visibility - API Gateway is only for public scopes
 visibility=$(echo "$CONTEXT" | jq -r '.scope.capabilities.visibility // "public"')
 
 if [ "$visibility" != "public" ]; then
   echo ""
-  echo "   ⏭️  Skipping API Gateway - visibility is '$visibility' (not public)"
+  log info "   ⏭️  Skipping API Gateway - visibility is '$visibility' (not public)"
   echo ""
   # Include API Gateway stubs so Route53 module always has api_gateway_* locals declared
   apigw_stubs="$SERVICE_PATH/deployment/dns/route53/stubs_no_api_gateway"
@@ -19,7 +21,7 @@ if [ "$visibility" != "public" ]; then
   return 0 2>/dev/null || return 0
 fi
 
-echo "   ✅ visibility=public"
+log debug "   ✅ visibility=public"
 
 # Extract scope information for naming
 scope_id=$(echo "$CONTEXT" | jq -r '.scope.id')
@@ -29,20 +31,20 @@ namespace_slug=$(echo "$CONTEXT" | jq -r '.namespace.slug')
 
 # API Gateway name
 api_gateway_name="${namespace_slug}-${application_slug}-${scope_slug}"
-echo "   ✅ api_name=$api_gateway_name"
+log debug "   ✅ api_name=$api_gateway_name"
 
 # Stage name - "default" maps to AWS $default stage (no path prefix in requests)
 stage_name="${API_GATEWAY_STAGE_NAME:-default}"
 if [ "$stage_name" = "default" ]; then
   stage_name='$default'
 fi
-echo "   ✅ stage_name=$stage_name"
+log debug "   ✅ stage_name=$stage_name"
 
 # Throttling settings
 throttling_burst_limit="${API_GATEWAY_THROTTLING_BURST_LIMIT:-5000}"
 throttling_rate_limit="${API_GATEWAY_THROTTLING_RATE_LIMIT:-10000}"
-echo "   ✅ throttling_burst_limit=$throttling_burst_limit"
-echo "   ✅ throttling_rate_limit=$throttling_rate_limit"
+log debug "   ✅ throttling_burst_limit=$throttling_burst_limit"
+log debug "   ✅ throttling_rate_limit=$throttling_rate_limit"
 
 # Check for custom domain configuration
 custom_domain=""
@@ -53,7 +55,7 @@ certificate_arn=""
 if [ -n "${API_GATEWAY_CUSTOM_DOMAIN:-}" ]; then
   custom_domain="$API_GATEWAY_CUSTOM_DOMAIN"
   certificate_arn="${API_GATEWAY_CERTIFICATE_ARN:-}"
-  echo "   ✅ custom_domain=$custom_domain"
+  log debug "   ✅ custom_domain=$custom_domain"
 fi
 
 # Get Lambda information from context (set by compute layer)
@@ -62,15 +64,15 @@ lambda_function_name=$(echo "$CONTEXT" | jq -r '.lambda.function_name // empty')
 
 if [ -z "$lambda_function_name" ]; then
   echo ""
-  echo "   ❌ Lambda function name not found in context"
-  echo ""
-  echo "  💡 Possible causes:"
-  echo "    • The compute/lambda layer was not set up before this layer"
-  echo ""
+  echo "   ❌ Lambda function name not found in context" >&2
+  echo "" >&2
+  echo "  💡 Possible causes:" >&2
+  echo "    • The compute/lambda layer was not set up before this layer" >&2
+  echo "" >&2
   return 1
 fi
 
-echo "   ✅ lambda_function_name=$lambda_function_name"
+log debug "   ✅ lambda_function_name=$lambda_function_name"
 
 RESOURCE_TAGS_JSON=${RESOURCE_TAGS_JSON:-"{}"}
 
@@ -93,7 +95,7 @@ TOFU_VARIABLES=$(echo "$TOFU_VARIABLES" | jq \
   }')
 
 echo ""
-echo "✨ API Gateway configured successfully"
+log info "✨ API Gateway configured successfully"
 echo ""
 
 # Add module to composition list

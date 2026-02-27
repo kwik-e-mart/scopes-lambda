@@ -1,11 +1,13 @@
 #!/bin/bash
 
-echo "🔍 Validating IAM configuration..."
+source "$SERVICE_PATH/utils/log"
+
+log info "🔍 Validating IAM configuration..."
 
 # Check if dedicated role is enabled via NRN
 scope_nrn=$(echo "$CONTEXT" | jq -r '.scope.nrn')
 
-echo "   📡 Checking IAM role configuration from NRN..."
+log info "   📡 Checking IAM role configuration from NRN..."
 
 # Try to get IAM configuration from NRN
 use_dedicated_role="false"
@@ -18,7 +20,7 @@ execution_role_arn=""
 
 # Read NRN configuration for IAM
 nrn_output=$(np nrn read --nrn "$scope_nrn" --ids "lambda.aws_lambda_execution_role_arn,lambda.aws_lambda_use_dedicated_role,lambda.aws_lambda_dedicated_role_name_template,lambda.aws_lambda_dedicated_role_policies,lambda.aws_lambda_dedicated_role_entity,lambda.aws_dedicated_role_arn,lambda.aws_dedicated_role_name" --format json 2>&1)
-echo "NRN: $nrn_output"
+log debug "NRN: $nrn_output"
 
 nrn_exit_code=$?
 
@@ -32,8 +34,8 @@ if [ $nrn_exit_code -eq 0 ]; then
   execution_role_arn=$(echo "$nrn_output" | jq -r '.namespaces.lambda.aws_lambda_execution_role_arn // ""')
 fi
 
-echo "   ✅ use_dedicated_role=$use_dedicated_role"
-echo "   ✅ role_entity=$role_entity"
+log debug "   ✅ use_dedicated_role=$use_dedicated_role"
+log debug "   ✅ role_entity=$role_entity"
 
 # If not using dedicated role, check for existing role ARN in context
 if [ "$use_dedicated_role" != "true" ]; then
@@ -45,19 +47,19 @@ if [ "$use_dedicated_role" != "true" ]; then
 
   if [ -z "$lambda_role_arn" ] || [ "$lambda_role_arn" = "null" ]; then
     echo ""
-    echo "   ❌ No Lambda execution role configured"
-    echo ""
-    echo "  💡 Possible causes:"
-    echo "    • Dedicated role is not enabled and no default role is configured"
-    echo ""
-    echo "  🔧 How to fix:"
-    echo "    • Enable dedicated roles via NRN configuration"
-    echo "    • Or configure lambda.execution_role_arn in the cloud-provider"
-    echo ""
+    echo "   ❌ No Lambda execution role configured" >&2
+    echo "" >&2
+    echo "  💡 Possible causes:" >&2
+    echo "    • Dedicated role is not enabled and no default role is configured" >&2
+    echo "" >&2
+    echo "  🔧 How to fix:" >&2
+    echo "    • Enable dedicated roles via NRN configuration" >&2
+    echo "    • Or configure lambda.execution_role_arn in the cloud-provider" >&2
+    echo "" >&2
     return 1
   fi
 
-  echo "   ✅ Using existing role: $lambda_role_arn"
+  log debug "   ✅ Using existing role: $lambda_role_arn"
 
   # Add role ARN to TOFU_VARIABLES without creating IAM resources
   TOFU_VARIABLES=$(echo "$TOFU_VARIABLES" | jq \
@@ -65,7 +67,7 @@ if [ "$use_dedicated_role" != "true" ]; then
     '. + {lambda_role_arn: $role_arn, iam_create_role: false}')
 
   echo ""
-  echo "✨ IAM configured (using existing role)"
+  log info "✨ IAM configured (using existing role)"
   echo ""
 
   # Add module to composition list (needed for cross-module lambda_role_arn local)
@@ -83,25 +85,25 @@ fi
 # Using dedicated role - validate required fields
 if [ -z "$role_name_template" ] || [ "$role_name_template" = "null" ] || [ "$role_name_template" = "" ]; then
   echo ""
-  echo "   ❌ Role name template not configured"
-  echo ""
-  echo "  🔧 How to fix:"
-  echo "    Set AWS_LAMBDA_DEDICATED_ROLE_NAME_TEMPLATE in NRN configuration"
-  echo ""
+  echo "   ❌ Role name template not configured" >&2
+  echo "" >&2
+  echo "  🔧 How to fix:" >&2
+  echo "    Set AWS_LAMBDA_DEDICATED_ROLE_NAME_TEMPLATE in NRN configuration" >&2
+  echo "" >&2
   return 1
 fi
 
 if [ "$role_policies" = "[]" ] || [ "$role_policies" = "null" ]; then
   echo ""
-  echo "   ❌ Role policies not configured"
-  echo ""
-  echo "  🔧 How to fix:"
-  echo "    Set AWS_LAMBDA_DEDICATED_ROLE_POLICIES in NRN configuration"
-  echo ""
+  echo "   ❌ Role policies not configured" >&2
+  echo "" >&2
+  echo "  🔧 How to fix:" >&2
+  echo "    Set AWS_LAMBDA_DEDICATED_ROLE_POLICIES in NRN configuration" >&2
+  echo "" >&2
   return 1
 fi
 
-echo "   ✅ role_name_template=$role_name_template"
+log debug "   ✅ role_name_template=$role_name_template"
 
 # Generate role name from template
 scope_id=$(echo "$CONTEXT" | jq -r '.scope.id')
@@ -123,11 +125,11 @@ iam_role_name="${iam_role_name//\{deployment_id\}/$deployment_id}"
 # Truncate to 64 chars (AWS IAM role name limit)
 iam_role_name="${iam_role_name:0:64}"
 
-echo "   ✅ iam_role_name=$iam_role_name"
+log debug "   ✅ iam_role_name=$iam_role_name"
 
 # Check if role already exists
 if [ -n "$existing_role_arn" ] && [ "$existing_role_arn" != "null" ] && [ "$existing_role_arn" != "" ]; then
-  echo "   ✅ Using existing dedicated role: $existing_role_arn"
+  log debug "   ✅ Using existing dedicated role: $existing_role_arn"
 
   TOFU_VARIABLES=$(echo "$TOFU_VARIABLES" | jq \
     --arg role_arn "$existing_role_arn" \
@@ -138,7 +140,7 @@ if [ -n "$existing_role_arn" ] && [ "$existing_role_arn" != "null" ] && [ "$exis
       iam_create_role: false
     }')
 else
-  echo "   📝 Will create new IAM role"
+  log info "   📝 Will create new IAM role"
 
   # Parse policies JSON
   policies_json="$role_policies"
@@ -161,7 +163,7 @@ else
 fi
 
 echo ""
-echo "✨ IAM configured successfully"
+log info "✨ IAM configured successfully"
 echo ""
 
 # Add module to composition list

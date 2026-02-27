@@ -1,6 +1,8 @@
 #!/bin/bash
 
-echo "🔍 Validating Lambda compute configuration..."
+source "$SERVICE_PATH/utils/log"
+
+log info "🔍 Validating Lambda compute configuration..."
 
 # Extract values from CONTEXT
 lambda_function_name=$(echo "$CONTEXT" | jq -r '.lambda.function_name // empty')
@@ -11,19 +13,19 @@ asset_url=$(echo "$CONTEXT" | jq -r '.asset.url // empty')
 
 if [ -z "$asset_url" ] || [ "$asset_url" = "null" ]; then
   echo ""
-  echo "   ❌ Asset URL not found in context"
-  echo ""
-  echo "  💡 Possible causes:"
-  echo "    • The deployment does not have an associated asset"
-  echo "    • The asset was not built or uploaded correctly"
-  echo ""
-  echo "  🔧 How to fix:"
-  echo "    • Ensure the application has a valid build that produces a Lambda deployment package"
-  echo ""
+  echo "   ❌ Asset URL not found in context" >&2
+  echo "" >&2
+  echo "  💡 Possible causes:" >&2
+  echo "    • The deployment does not have an associated asset" >&2
+  echo "    • The asset was not built or uploaded correctly" >&2
+  echo "" >&2
+  echo "  🔧 How to fix:" >&2
+  echo "    • Ensure the application has a valid build that produces a Lambda deployment package" >&2
+  echo "" >&2
   return 1
 fi
 
-echo "   ✅ asset_url=$asset_url"
+log debug "   ✅ asset_url=$asset_url"
 
 # Parse S3 URL to extract bucket and key
 # Supports both s3:// and https:// formats
@@ -37,16 +39,16 @@ elif [[ "$asset_url" == https://*.s3.*.amazonaws.com/* ]]; then
   lambda_s3_key=$(echo "$asset_url" | sed 's|https://[^/]*/||')
 else
   echo ""
-  echo "   ❌ Unsupported asset URL format: $asset_url"
-  echo ""
-  echo "  🔧 How to fix:"
-  echo "    • Asset URL must be in S3 format (s3://bucket/key or https://bucket.s3.region.amazonaws.com/key)"
-  echo ""
+  echo "   ❌ Unsupported asset URL format: $asset_url" >&2
+  echo "" >&2
+  echo "  🔧 How to fix:" >&2
+  echo "    • Asset URL must be in S3 format (s3://bucket/key or https://bucket.s3.region.amazonaws.com/key)" >&2
+  echo "" >&2
   return 1
 fi
 
-echo "   ✅ s3_bucket=$lambda_s3_bucket"
-echo "   ✅ s3_key=$lambda_s3_key"
+log debug "   ✅ s3_bucket=$lambda_s3_bucket"
+log debug "   ✅ s3_key=$lambda_s3_key"
 
 # Extract capabilities from scope
 runtime=$(echo "$CONTEXT" | jq -r '.scope.capabilities.runtime // "nodejs20.x"')
@@ -56,11 +58,11 @@ timeout=$(echo "$CONTEXT" | jq -r '.scope.capabilities.timeout // 30')
 ephemeral_storage=$(echo "$CONTEXT" | jq -r '.scope.capabilities.ephemeral_storage // 512')
 architecture=$(echo "$CONTEXT" | jq -r '.scope.capabilities.architecture // "arm64"')
 
-echo "   ✅ runtime=$runtime"
-echo "   ✅ handler=$handler"
-echo "   ✅ memory=${memory}MB"
-echo "   ✅ timeout=${timeout}s"
-echo "   ✅ architecture=$architecture"
+log debug "   ✅ runtime=$runtime"
+log debug "   ✅ handler=$handler"
+log debug "   ✅ memory=${memory}MB"
+log debug "   ✅ timeout=${timeout}s"
+log debug "   ✅ architecture=$architecture"
 
 # Reserved concurrency
 reserved_type=$(echo "$CONTEXT" | jq -r '.scope.capabilities.reserved_concurrency.type // "unreserved"')
@@ -71,11 +73,11 @@ provisioned_type=$(echo "$CONTEXT" | jq -r '.scope.capabilities.provisioned_conc
 provisioned_value=$(echo "$CONTEXT" | jq -r '.scope.capabilities.provisioned_concurrency.value // 0')
 warmup_alias=$(echo "$CONTEXT" | jq -r '.scope.capabilities.provisioned_concurrency.warmup_alias // ""')
 
-echo "   ✅ reserved_concurrency=$reserved_type ($reserved_value)"
-echo "   ✅ provisioned_concurrency=$provisioned_type ($provisioned_value)"
+log debug "   ✅ reserved_concurrency=$reserved_type ($reserved_value)"
+log debug "   ✅ provisioned_concurrency=$provisioned_type ($provisioned_value)"
 
 if [ -n "$warmup_alias" ] && [ "$warmup_alias" != "null" ] && [ "$warmup_alias" != "" ]; then
-  echo "   ✅ warmup_alias=$warmup_alias"
+  log debug "   ✅ warmup_alias=$warmup_alias"
 fi
 
 # VPC configuration
@@ -91,14 +93,14 @@ if [ "$vpc_enabled" = "true" ]; then
       --argjson subnet_ids "$subnet_ids" \
       --argjson security_group_ids "$security_group_ids" \
       '{subnet_ids: $subnet_ids, security_group_ids: $security_group_ids}')
-    echo "   ✅ vpc_enabled=true"
+    log debug "   ✅ vpc_enabled=true"
   else
     echo ""
-    echo "   ❌ VPC enabled but subnet_ids or security_group_ids not configured"
-    echo ""
-    echo "  🔧 How to fix:"
-    echo "    • Configure networking.subnet_ids and networking.security_group_ids in the cloud-provider"
-    echo ""
+    echo "   ❌ VPC enabled but subnet_ids or security_group_ids not configured" >&2
+    echo "" >&2
+    echo "  🔧 How to fix:" >&2
+    echo "    • Configure networking.subnet_ids and networking.security_group_ids in the cloud-provider" >&2
+    echo "" >&2
     return 1
   fi
 fi
@@ -109,7 +111,7 @@ custom_layers=$(echo "$CONTEXT" | jq -c '.scope.capabilities.layers // []')
 # Add nullplatform agent layer if enabled
 if [ "${USE_NULL_AGENT:-true}" = "true" ] && [ -n "${NULL_AGENT_LAYER_ARN:-}" ]; then
   custom_layers=$(echo "$custom_layers" | jq --arg layer "$NULL_AGENT_LAYER_ARN" '. + [$layer]')
-  echo "   ✅ nullplatform_agent_layer=$NULL_AGENT_LAYER_ARN"
+  log debug "   ✅ nullplatform_agent_layer=$NULL_AGENT_LAYER_ARN"
 fi
 
 # Build environment variables from parameters
@@ -132,7 +134,7 @@ if [ "${USE_NULL_AGENT:-true}" = "true" ] && [ -n "${NULL_AGENT_LAYER_ARN:-}" ];
 fi
 
 echo ""
-echo "   📡 Building Lambda configuration..."
+log info "   📡 Building Lambda configuration..."
 
 # Main alias name
 main_alias_name="${LAMBDA_MAIN_ALIAS_NAME:-main}"
@@ -140,16 +142,16 @@ main_alias_name="${LAMBDA_MAIN_ALIAS_NAME:-main}"
 # Validate function name
 if [ -z "$lambda_function_name" ] || [ "$lambda_function_name" = "null" ]; then
   echo ""
-  echo "   ❌ Lambda function name not found in context"
-  echo ""
-  echo "  💡 Possible causes:"
-  echo "    • Scope was not created properly"
-  echo "    • Lambda placeholder was not created during scope creation"
-  echo ""
+  echo "   ❌ Lambda function name not found in context" >&2
+  echo "" >&2
+  echo "  💡 Possible causes:" >&2
+  echo "    • Scope was not created properly" >&2
+  echo "    • Lambda placeholder was not created during scope creation" >&2
+  echo "" >&2
   return 1
 fi
 
-echo "   ✅ function_name=$lambda_function_name"
+log debug "   ✅ function_name=$lambda_function_name"
 
 # Build TOFU_VARIABLES
 TOFU_VARIABLES=$(echo "$TOFU_VARIABLES" | jq \
@@ -195,7 +197,7 @@ TOFU_VARIABLES=$(echo "$TOFU_VARIABLES" | jq \
   }')
 
 echo ""
-echo "✨ Lambda compute configured successfully"
+log info "✨ Lambda compute configured successfully"
 echo ""
 
 # Add module to composition list

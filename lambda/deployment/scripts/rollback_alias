@@ -2,7 +2,9 @@
 # Rollback Lambda alias to previous version
 # Used when a deployment needs to be rolled back
 
-echo "🔄 Rolling back Lambda alias to previous version..."
+source "$SERVICE_PATH/utils/log"
+
+log info "🔄 Rolling back Lambda alias to previous version..."
 
 if [ -z "${LAMBDA_FUNCTION_NAME:-}" ]; then
   echo "❌ LAMBDA_FUNCTION_NAME is required" >&2
@@ -17,8 +19,8 @@ fi
 
 alias_name="${LAMBDA_MAIN_ALIAS_NAME:-main}"
 
-echo "   ✅ function_name=$LAMBDA_FUNCTION_NAME"
-echo "   ✅ alias=$alias_name"
+log debug "   ✅ function_name=$LAMBDA_FUNCTION_NAME"
+log debug "   ✅ alias=$alias_name"
 
 # Blue version = Lambda version of the currently active deployment (what we rollback to)
 previous_version="${LAMBDA_BLUE_VERSION:-}"
@@ -35,10 +37,10 @@ if [ -z "$previous_version" ] || [ "$previous_version" = "null" ]; then
   return 1
 fi
 
-echo "   ✅ previous_version=$previous_version"
+log debug "   ✅ previous_version=$previous_version"
 
 echo ""
-echo "   📝 Updating alias $alias_name to point to version $previous_version on function $LAMBDA_FUNCTION_NAME..."
+log info "   📝 Updating alias $alias_name to point to version $previous_version on function $LAMBDA_FUNCTION_NAME..."
 
 update_output=$(aws lambda update-alias \
   --function-name "$LAMBDA_FUNCTION_NAME" \
@@ -60,6 +62,6 @@ if [ $update_exit_code -ne 0 ]; then
   return 1
 fi
 
-echo "   ✅ Alias $alias_name rolled back successfully to version $previous_version"
+log debug "   ✅ Alias $alias_name rolled back successfully to version $previous_version"
 echo ""
-echo "✨ Rollback complete - traffic restored to version $previous_version on function=$LAMBDA_FUNCTION_NAME"
+log info "✨ Rollback complete - traffic restored to version $previous_version on function=$LAMBDA_FUNCTION_NAME"

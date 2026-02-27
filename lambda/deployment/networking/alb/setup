@@ -1,13 +1,15 @@
 #!/bin/bash
 
-echo "🔍 Validating ALB configuration..."
+source "$SERVICE_PATH/utils/log"
+
+log info "🔍 Validating ALB configuration..."
 
 # Check visibility - ALB is only for private scopes
 visibility=$(echo "$CONTEXT" | jq -r '.scope.capabilities.visibility // "public"')
 
 if [ "$visibility" != "private" ] && [ "$visibility" != "internal" ]; then
   echo ""
-  echo "   ⏭️  Skipping ALB - visibility is '$visibility' (not private/internal)"
+  log info "   ⏭️  Skipping ALB - visibility is '$visibility' (not private/internal)"
   echo ""
   # Include ALB stubs so Route53 module always has alb_dns_name / alb_zone_id locals declared
   alb_stubs="$SERVICE_PATH/deployment/dns/route53/stubs_no_alb"
@@ -19,7 +21,7 @@ if [ "$visibility" != "private" ] && [ "$visibility" != "internal" ]; then
   return 0 2>/dev/null || return 0
 fi
 
-echo "   ✅ visibility=$visibility"
+log debug "   ✅ visibility=$visibility"
 
 # Get ALB listener ARN from context or environment
 alb_listener_arn=$(echo "$CONTEXT" | jq -r '.providers["cloud-providers"].alb.listener_arn // empty')
@@ -31,20 +33,20 @@ fi
 
 if [ -z "$alb_listener_arn" ]; then
   echo ""
-  echo "   ❌ ALB listener ARN not found"
-  echo ""
-  echo "  💡 Possible causes:"
-  echo "    • ALB listener ARN not configured in cloud-provider"
-  echo "    • ALB_LISTENER_ARN environment variable not set"
-  echo ""
-  echo "  🔧 How to fix:"
-  echo "    • Configure alb.listener_arn in the cloud-provider settings"
-  echo "    • Or set ALB_LISTENER_ARN environment variable in Helm values"
-  echo ""
+  echo "   ❌ ALB listener ARN not found" >&2
+  echo "" >&2
+  echo "  💡 Possible causes:" >&2
+  echo "    • ALB listener ARN not configured in cloud-provider" >&2
+  echo "    • ALB_LISTENER_ARN environment variable not set" >&2
+  echo "" >&2
+  echo "  🔧 How to fix:" >&2
+  echo "    • Configure alb.listener_arn in the cloud-provider settings" >&2
+  echo "    • Or set ALB_LISTENER_ARN environment variable in Helm values" >&2
+  echo "" >&2
   return 1
 fi
 
-echo "   ✅ alb_listener_arn=$alb_listener_arn"
+log debug "   ✅ alb_listener_arn=$alb_listener_arn"
 
 # Extract scope information for naming
 scope_id=$(echo "$CONTEXT" | jq -r '.scope.id')
@@ -60,7 +62,7 @@ app_slug_nodash="${application_slug//-/}"
 scope_slug_nodash="${scope_slug//-/}"
 target_group_name="${scope_id}-${app_slug_nodash:0:9}-${scope_slug_nodash:0:9}"
 target_group_name="${target_group_name:0:32}"
-echo "   ✅ target_group_name=$target_group_name"
+log debug "   ✅ target_group_name=$target_group_name"
 
 # Host header for routing
 # Prefer dns_full_domain from TOFU_VARIABLES (set by setup_dns which runs before setup_networking).
@@ -72,7 +74,7 @@ fi
 if [ -z "$host_header" ] || [ "$host_header" = "null" ]; then
   host_header="${namespace_slug}-${application_slug}-${scope_slug}.internal"
 fi
-echo "   ✅ host_header=$host_header"
+log debug "   ✅ host_header=$host_header"
 
 # Rule priority - incremental assignment with NRN persistence
 # 1. NRN (re-deployments are idempotent, no race condition)
@@ -85,10 +87,10 @@ if [ "$nrn_priority_output" != "{}" ]; then
 fi
 
 if [ -n "$rule_priority" ] && [ "$rule_priority" != "null" ]; then
-  echo "   ✅ rule_priority=$rule_priority (from NRN)"
+  log debug "   ✅ rule_priority=$rule_priority (from NRN)"
 else
   priority_start="${ALB_LISTENER_RULE_PRIORITY_START:-100}"
-  echo "   📡 Querying listener for used priorities (range start: $priority_start)..."
+  log info "   📡 Querying listener for used priorities (range start: $priority_start)..."
 
   used_priorities_json=$(aws elbv2 describe-rules \
     --listener-arn "$alb_listener_arn" \
@@ -99,7 +101,7 @@ else
     rule_priority=$((rule_priority + 1))
   done
 
-  echo "   ✅ rule_priority=$rule_priority (auto-assigned)"
+  log debug "   ✅ rule_priority=$rule_priority (auto-assigned)"
 fi
 
 ALB_RULE_PRIORITY="$rule_priority"
@@ -112,19 +114,19 @@ if [ "$health_check_path" = "" ] || [ "$health_check_path" = "null" ]; then
   health_check_enabled="false"
   health_check_path="/health"
 fi
-echo "   ✅ health_check_path=$health_check_path (enabled=$health_check_enabled)"
+log debug "   ✅ health_check_path=$health_check_path (enabled=$health_check_enabled)"
 
 # Get Lambda information from context
 lambda_function_name=$(echo "$CONTEXT" | jq -r '.lambda.function_name // empty')
 
 if [ -z "$lambda_function_name" ]; then
   echo ""
-  echo "   ❌ Lambda function name not found in context"
-  echo ""
+  echo "   ❌ Lambda function name not found in context" >&2
+  echo "" >&2
   return 1
 fi
 
-echo "   ✅ lambda_function_name=$lambda_function_name"
+log debug "   ✅ lambda_function_name=$lambda_function_name"
 
 RESOURCE_TAGS_JSON=${RESOURCE_TAGS_JSON:-"{}"}
 
@@ -147,7 +149,7 @@ TOFU_VARIABLES=$(echo "$TOFU_VARIABLES" | jq \
   }')
 
 echo ""
-echo "✨ ALB configured successfully"
+log info "✨ ALB configured successfully"
 echo ""
 
 # Add module to composition list

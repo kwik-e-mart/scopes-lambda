@@ -1,6 +1,8 @@
 #!/bin/bash
 
-echo "🔍 Validating Route53 DNS configuration..."
+source "$SERVICE_PATH/utils/log"
+
+log info "🔍 Validating Route53 DNS configuration..."
 
 # Get hosted zone ID from context
 # For private/internal scopes, prefer hosted_zone_id if available; fall back to public zone.
@@ -9,11 +11,11 @@ visibility=$(echo "$CONTEXT" | jq -r '.scope.capabilities.visibility // "public"
 if [ "$visibility" = "private" ] || [ "$visibility" = "internal" ]; then
   hosted_zone_id=$(echo "$CONTEXT" | jq -r '.providers["cloud-providers"].networking.hosted_zone_id // empty')
   if [ -n "$hosted_zone_id" ] && [ "$hosted_zone_id" != "null" ]; then
-    echo "   ✅ Using private hosted zone (visibility=$visibility)"
+    log debug "   ✅ Using private hosted zone (visibility=$visibility)"
   else
     # Fall back to public zone if no private zone is configured
     hosted_zone_id=$(echo "$CONTEXT" | jq -r '.providers["cloud-providers"].networking.hosted_public_zone_id // empty')
-    echo "   ⚠️  No hosted_zone_id configured, falling back to public zone"
+    log warn "   ⚠️  No hosted_zone_id configured, falling back to public zone"
   fi
 else
   hosted_zone_id=$(echo "$CONTEXT" | jq -r '.providers["cloud-providers"].networking.hosted_public_zone_id // empty')
@@ -21,15 +23,15 @@ fi
 
 if [ -z "$hosted_zone_id" ] || [ "$hosted_zone_id" = "null" ]; then
   echo ""
-  echo "   ❌ No hosted zone ID configured"
-  echo ""
-  echo "  🔧 How to fix:"
-  echo "    1. Ensure there is an AWS cloud-provider configured at the correct NRN hierarchy level"
-  echo "    2. Set 'hosted_public_zone_id' (public scopes) or 'hosted_zone_id' (private/internal scopes)"
-  echo ""
+  echo "   ❌ No hosted zone ID configured" >&2
+  echo "" >&2
+  echo "  🔧 How to fix:" >&2
+  echo "    1. Ensure there is an AWS cloud-provider configured at the correct NRN hierarchy level" >&2
+  echo "    2. Set 'hosted_public_zone_id' (public scopes) or 'hosted_zone_id' (private/internal scopes)" >&2
+  echo "" >&2
   return 1
 fi
-echo "   ✅ hosted_zone_id=$hosted_zone_id"
+log debug "   ✅ hosted_zone_id=$hosted_zone_id"
 
 # Extract scope information
 scope_id=$(echo "$CONTEXT" | jq -r '.scope.id')
@@ -39,42 +41,42 @@ namespace_slug=$(echo "$CONTEXT" | jq -r '.namespace.slug')
 account_slug=$(echo "$CONTEXT" | jq -r '.account.slug')
 
 echo ""
-echo "   📡 Fetching domain from Route 53 hosted zone..."
+log info "   📡 Fetching domain from Route 53 hosted zone..."
 
 aws_output=$(aws route53 get-hosted-zone --id "$hosted_zone_id" 2>&1)
 aws_exit_code=$?
 
 if [ $aws_exit_code -ne 0 ]; then
   echo ""
-  echo "   ❌ Failed to fetch Route 53 hosted zone information"
-  echo ""
+  echo "   ❌ Failed to fetch Route 53 hosted zone information" >&2
+  echo "" >&2
 
   if echo "$aws_output" | grep -q "NoSuchHostedZone"; then
-    echo "  🔎 Error: Hosted zone '$hosted_zone_id' does not exist"
-    echo ""
-    echo "  💡 Possible causes:"
-    echo "    • The hosted zone ID is incorrect or has a typo"
-    echo "    • The hosted zone was deleted"
-    echo ""
-    echo "  🔧 How to fix:"
-    echo "    1. Verify the hosted zone exists: aws route53 list-hosted-zones"
-    echo "    2. Update 'hosted_public_zone_id' in the AWS cloud-provider configuration"
+    echo "  🔎 Error: Hosted zone '$hosted_zone_id' does not exist" >&2
+    echo "" >&2
+    echo "  💡 Possible causes:" >&2
+    echo "    • The hosted zone ID is incorrect or has a typo" >&2
+    echo "    • The hosted zone was deleted" >&2
+    echo "" >&2
+    echo "  🔧 How to fix:" >&2
+    echo "    1. Verify the hosted zone exists: aws route53 list-hosted-zones" >&2
+    echo "    2. Update 'hosted_public_zone_id' in the AWS cloud-provider configuration" >&2
 
   elif echo "$aws_output" | grep -q "AccessDenied\|not authorized"; then
-    echo "  🔒 Error: Permission denied when accessing Route 53"
-    echo ""
-    echo "  💡 Possible causes:"
-    echo "    • The AWS credentials don't have Route 53 read permissions"
-    echo ""
-    echo "  🔧 How to fix:"
-    echo "    1. Ensure the IAM policy includes route53:GetHostedZone permission"
+    echo "  🔒 Error: Permission denied when accessing Route 53" >&2
+    echo "" >&2
+    echo "  💡 Possible causes:" >&2
+    echo "    • The AWS credentials don't have Route 53 read permissions" >&2
+    echo "" >&2
+    echo "  🔧 How to fix:" >&2
+    echo "    1. Ensure the IAM policy includes route53:GetHostedZone permission" >&2
 
   else
-    echo "  📋 Error details:"
-    echo "$aws_output" | sed 's/^/    /'
+    echo "  📋 Error details:" >&2
+    echo "$aws_output" | sed 's/^/    /' >&2
   fi
 
-  echo ""
+  echo "" >&2
   return 1
 fi
 
@@ -82,12 +84,12 @@ network_domain=$(echo "$aws_output" | jq -r '.HostedZone.Name' | sed 's/\.$//')
 
 if [ -z "$network_domain" ] || [ "$network_domain" = "null" ]; then
   echo ""
-  echo "   ❌ Failed to extract domain name from hosted zone response"
-  echo ""
+  echo "   ❌ Failed to extract domain name from hosted zone response" >&2
+  echo "" >&2
   return 1
 fi
 
-echo "   ✅ domain=$network_domain"
+log debug "   ✅ domain=$network_domain"
 
 # Generate subdomain based on pattern
 use_account_slug="${USE_ACCOUNT_SLUG:-true}"
@@ -98,11 +100,11 @@ else
   network_subdomain="${namespace_slug}-${application_slug}-${scope_slug}"
 fi
 
-echo "   ✅ subdomain=$network_subdomain"
+log debug "   ✅ subdomain=$network_subdomain"
 
 # Full domain
 scope_domain="${network_subdomain}.${network_domain}"
-echo "   ✅ full_domain=$scope_domain"
+log debug "   ✅ full_domain=$scope_domain"
 
 # Determine the DNS target based on visibility
 visibility=$(echo "$CONTEXT" | jq -r '.scope.capabilities.visibility // "public"')
@@ -129,8 +131,8 @@ if [ -n "$api_gateway_name" ]; then
   cert_arn="${CERTIFICATE_ARN:-}"
 
   if [ -n "$cert_arn" ]; then
-    echo "   ✅ certificate_arn=$cert_arn"
-    echo "   📝 Configuring API Gateway custom domain: $scope_domain"
+    log debug "   ✅ certificate_arn=$cert_arn"
+    log info "   📝 Configuring API Gateway custom domain: $scope_domain"
 
     TOFU_VARIABLES=$(echo "$TOFU_VARIABLES" | jq \
       --arg domain "$scope_domain" \
@@ -142,41 +144,41 @@ if [ -n "$api_gateway_name" ]; then
         dns_use_api_gateway_cname: false
       }')
   else
-    echo "   ⚠️  CERTIFICATE_ARN not set - using CNAME to execute-api endpoint (no custom SSL)"
+    log warn "   ⚠️  CERTIFICATE_ARN not set - using CNAME to execute-api endpoint (no custom SSL)"
     TOFU_VARIABLES=$(echo "$TOFU_VARIABLES" | jq '. + {dns_use_api_gateway_cname: true}')
   fi
 fi
 
 echo ""
-echo "   📝 Setting scope domain to '$scope_domain'..."
+log info "   📝 Setting scope domain to '$scope_domain'..."
 
 np_output=$(np scope patch --id "$scope_id" --body "{\"domain\":\"$scope_domain\"}" --format json 2>&1)
 np_exit_code=$?
 
 if [ $np_exit_code -ne 0 ]; then
   echo ""
-  echo "   ❌ Failed to update scope domain"
-  echo ""
+  echo "   ❌ Failed to update scope domain" >&2
+  echo "" >&2
 
   if echo "$np_output" | grep -q "unauthorized\|forbidden\|401\|403"; then
-    echo "  🔒 Error: Permission denied"
-    echo ""
-    echo "  💡 Possible causes:"
-    echo "    • The nullplatform API Key doesn't have 'Developer' permissions"
-    echo ""
+    echo "  🔒 Error: Permission denied" >&2
+    echo "" >&2
+    echo "  💡 Possible causes:" >&2
+    echo "    • The nullplatform API Key doesn't have 'Developer' permissions" >&2
+    echo "" >&2
   else
-    echo "  📋 Error details:"
-    echo "$np_output" | sed 's/^/    /'
+    echo "  📋 Error details:" >&2
+    echo "$np_output" | sed 's/^/    /' >&2
   fi
 
-  echo ""
+  echo "" >&2
   return 1
 fi
 
-echo "   ✅ Scope domain set successfully"
+log debug "   ✅ Scope domain set successfully"
 
 echo ""
-echo "✨ Route53 DNS configured successfully"
+log info "✨ Route53 DNS configured successfully"
 echo ""
 
 # Add module to composition list

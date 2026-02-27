@@ -2,7 +2,9 @@
 # Cleanup old Lambda version after successful deployment finalization
 # This removes the previous version to avoid accumulating unused versions
 
-echo "🧹 Cleaning up old Lambda version..."
+source "$SERVICE_PATH/utils/log"
+
+log info "🧹 Cleaning up old Lambda version..."
 
 if [ -z "${LAMBDA_FUNCTION_NAME:-}" ]; then
   echo "❌ LAMBDA_FUNCTION_NAME is required" >&2
@@ -19,26 +21,26 @@ fi
 old_version="${LAMBDA_BLUE_VERSION:-}"
 
 if [ -z "$old_version" ] || [ "$old_version" = "null" ] || [ "$old_version" = "" ]; then
-  echo "   ⏭️  No previous version found to cleanup"
+  log info "   ⏭️  No previous version found to cleanup"
   return 0
 fi
 
 if [ "$old_version" = "\$LATEST" ] || [ "$old_version" = "1" ]; then
-  echo "   ⏭️  Skipping deletion of version $old_version (protected)"
+  log info "   ⏭️  Skipping deletion of version $old_version (protected)"
   return 0
 fi
 
-echo "   ✅ function_name=$LAMBDA_FUNCTION_NAME"
-echo "   ✅ old_version=$old_version"
+log debug "   ✅ function_name=$LAMBDA_FUNCTION_NAME"
+log debug "   ✅ old_version=$old_version"
 
 echo ""
-echo "   📝 Deleting Lambda version $old_version from function $LAMBDA_FUNCTION_NAME..."
+log info "   📝 Deleting Lambda version $old_version from function $LAMBDA_FUNCTION_NAME..."
 
 aws lambda delete-function \
   --function-name "$LAMBDA_FUNCTION_NAME" \
   --qualifier "$old_version" \
   2>/dev/null || true
 
-echo "   ✅ Old version $old_version cleanup complete"
+log debug "   ✅ Old version $old_version cleanup complete"
 echo ""
-echo "✨ Cleanup finished for function=$LAMBDA_FUNCTION_NAME version=$old_version"
+log info "✨ Cleanup finished for function=$LAMBDA_FUNCTION_NAME version=$old_version"
