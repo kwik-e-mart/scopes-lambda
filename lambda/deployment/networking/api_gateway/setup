@@ -9,6 +9,13 @@ if [ "$visibility" != "public" ]; then
   echo ""
   echo "   ⏭️  Skipping API Gateway - visibility is '$visibility' (not public)"
   echo ""
+  # Include API Gateway stubs so Route53 module always has api_gateway_* locals declared
+  apigw_stubs="$SERVICE_PATH/deployment/dns/route53/stubs_no_api_gateway"
+  if [[ -n ${MODULES_TO_USE:-} ]]; then
+    MODULES_TO_USE="$MODULES_TO_USE,$apigw_stubs"
+  else
+    MODULES_TO_USE="$apigw_stubs"
+  fi
   return 0 2>/dev/null || return 0
 fi
 

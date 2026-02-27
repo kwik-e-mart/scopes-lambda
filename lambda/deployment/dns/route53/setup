@@ -188,13 +188,3 @@ if [[ -n $MODULES_TO_USE ]]; then
 else
   MODULES_TO_USE="$module_name"
 fi
-
-# Include API Gateway stubs when API Gateway is NOT composed (prevents undeclared local errors)
-if [ -z "$(echo "$TOFU_VARIABLES" | jq -r '.api_gateway_name // empty')" ]; then
-  MODULES_TO_USE="$MODULES_TO_USE,${script_dir}/stubs_no_api_gateway"
-fi
-
-# Include ALB stubs when ALB is NOT composed (prevents undeclared local errors)
-if [ -z "$(echo "$TOFU_VARIABLES" | jq -r '.alb_listener_arn // empty')" ]; then
-  MODULES_TO_USE="$MODULES_TO_USE,${script_dir}/stubs_no_alb"
-fi
