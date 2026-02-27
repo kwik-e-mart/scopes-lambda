@@ -54,8 +54,11 @@ namespace_slug=$(echo "$CONTEXT" | jq -r '.namespace.slug')
 
 # Target group name (max 32 chars for ALB)
 # scope_id guarantees uniqueness; app+scope slugs are for human readability in AWS console
-# Format: {app:9}-{scope:9}-{scope_id} → max 9+1+9+1+scope_id_len ≤ 32
-target_group_name="${application_slug:0:9}-${scope_slug:0:9}-${scope_id}"
+# Dashes removed from slugs to maximize readable chars within the 32-char limit
+# Format: {scope_id}-{app_nodash:9}-{scope_nodash:9}
+app_slug_nodash="${application_slug//-/}"
+scope_slug_nodash="${scope_slug//-/}"
+target_group_name="${scope_id}-${app_slug_nodash:0:9}-${scope_slug_nodash:0:9}"
 target_group_name="${target_group_name:0:32}"
 echo "   ✅ target_group_name=$target_group_name"
 
