@@ -2,12 +2,14 @@
 # Wait for provisioned concurrency to be allocated
 # This script polls Lambda until provisioned concurrency is READY
 
-echo "🔍 Checking provisioned concurrency status..."
+source "$SERVICE_PATH/utils/log"
+
+log info "🔍 Checking provisioned concurrency status..."
 
 provisioned_type=$(echo "$CONTEXT" | jq -r '.scope.capabilities.provisioned_concurrency.type // "unprovisioned"')
 
 if [ "$provisioned_type" != "provisioned" ]; then
-  echo "   ⏭️  Provisioned concurrency not enabled (type=$provisioned_type) - skipping wait"
+  log info "   ⏭️  Provisioned concurrency not enabled (type=$provisioned_type) - skipping wait"
   return 0
 fi
 
@@ -26,13 +28,13 @@ alias_name="${LAMBDA_MAIN_ALIAS_NAME:-main}"
 max_wait="${PROVISIONED_CONCURRENCY_MAX_WAIT_SECONDS:-600}"
 poll_interval="${PROVISIONED_CONCURRENCY_POLL_INTERVAL:-5}"
 
-echo "   ✅ function_name=$LAMBDA_FUNCTION_NAME"
-echo "   ✅ alias=$alias_name"
-echo "   ✅ max_wait=${max_wait}s"
-echo "   ✅ poll_interval=${poll_interval}s"
+log debug "   ✅ function_name=$LAMBDA_FUNCTION_NAME"
+log debug "   ✅ alias=$alias_name"
+log debug "   ✅ max_wait=${max_wait}s"
+log debug "   ✅ poll_interval=${poll_interval}s"
 
 echo ""
-echo "📡 Waiting for provisioned concurrency allocation on $LAMBDA_FUNCTION_NAME:$alias_name..."
+log info "📡 Waiting for provisioned concurrency allocation on $LAMBDA_FUNCTION_NAME:$alias_name..."
 
 start_time=$(date +%s)
 last_status=""
@@ -61,7 +63,7 @@ while true; do
     2>&1 || echo "NOT_FOUND")
 
   if echo "$status_output" | grep -q "ProvisionedConcurrencyConfigNotFoundException\|NOT_FOUND"; then
-    echo "   ⏭️  No provisioned concurrency configuration found on $LAMBDA_FUNCTION_NAME:$alias_name - skipping"
+    log info "   ⏭️  No provisioned concurrency configuration found on $LAMBDA_FUNCTION_NAME:$alias_name - skipping"
     return 0
   fi
 
@@ -70,15 +72,15 @@ while true; do
   allocated=$(echo "$status_output" | jq -r '.AllocatedProvisionedConcurrentExecutions // 0')
 
   if [ "$status" != "$last_status" ]; then
-    echo "   📋 Status: $status (requested=$requested, allocated=$allocated) [${elapsed}s elapsed]"
+    log info "   📋 Status: $status (requested=$requested, allocated=$allocated) [${elapsed}s elapsed]"
     last_status="$status"
   fi
 
   case "$status" in
     "READY")
       echo ""
-      echo "   ✅ Provisioned concurrency is READY on $LAMBDA_FUNCTION_NAME:$alias_name"
-      echo "   ✅ Allocated: $allocated instances"
+      log info "   ✅ Provisioned concurrency is READY on $LAMBDA_FUNCTION_NAME:$alias_name"
+      log debug "   ✅ Allocated: $allocated instances"
       break
       ;;
     "IN_PROGRESS")
@@ -97,7 +99,7 @@ while true; do
       return 1
       ;;
     *)
-      echo "   ⚠️  Unknown status: $status on $LAMBDA_FUNCTION_NAME:$alias_name"
+      log warn "   ⚠️  Unknown status: $status on $LAMBDA_FUNCTION_NAME:$alias_name"
       ;;
   esac
 
@@ -106,7 +108,7 @@ done
 
 if [ -n "${WARMUP_ALIAS_NAME:-}" ]; then
   echo ""
-  echo "📡 Checking provisioned concurrency on warm alias $WARMUP_ALIAS_NAME..."
+  log info "📡 Checking provisioned concurrency on warm alias $WARMUP_ALIAS_NAME..."
 
   warm_status_output=$(aws lambda get-provisioned-concurrency-config \
     --function-name "$LAMBDA_FUNCTION_NAME" \
@@ -114,13 +116,13 @@ if [ -n "${WARMUP_ALIAS_NAME:-}" ]; then
     2>&1 || echo "NOT_FOUND")
 
   if echo "$warm_status_output" | grep -q "ProvisionedConcurrencyConfigNotFoundException\|NOT_FOUND"; then
-    echo "   ⏭️  No provisioned concurrency on warm alias $WARMUP_ALIAS_NAME - skipping"
+    log info "   ⏭️  No provisioned concurrency on warm alias $WARMUP_ALIAS_NAME - skipping"
   else
     warm_status=$(echo "$warm_status_output" | jq -r '.Status // "UNKNOWN"')
     warm_requested=$(echo "$warm_status_output" | jq -r '.RequestedProvisionedConcurrentExecutions // 0')
     warm_allocated=$(echo "$warm_status_output" | jq -r '.AllocatedProvisionedConcurrentExecutions // 0')
 
-    echo "   📋 Warm alias status: $warm_status (requested=$warm_requested, allocated=$warm_allocated)"
+    log info "   📋 Warm alias status: $warm_status (requested=$warm_requested, allocated=$warm_allocated)"
 
     warm_start_time=$(date +%s)
 
@@ -149,11 +151,11 @@ if [ -n "${WARMUP_ALIAS_NAME:-}" ]; then
       warm_status=$(echo "$warm_status_output" | jq -r '.Status // "UNKNOWN"')
       warm_allocated=$(echo "$warm_status_output" | jq -r '.AllocatedProvisionedConcurrentExecutions // 0')
 
-      echo "   📋 Warm alias status: $warm_status (allocated=$warm_allocated) [${warm_elapsed}s elapsed]"
+      log info "   📋 Warm alias status: $warm_status (allocated=$warm_allocated) [${warm_elapsed}s elapsed]"
     done
 
     if [ "$warm_status" = "READY" ]; then
-      echo "   ✅ Warm alias $WARMUP_ALIAS_NAME provisioned concurrency is READY (allocated=$warm_allocated)"
+      log info "   ✅ Warm alias $WARMUP_ALIAS_NAME provisioned concurrency is READY (allocated=$warm_allocated)"
     elif [ "$warm_status" = "FAILED" ]; then
       warm_reason=$(echo "$warm_status_output" | jq -r '.StatusReason // "Unknown"')
       echo "❌ Provisioned concurrency FAILED on warm alias $WARMUP_ALIAS_NAME" >&2
@@ -168,4 +170,4 @@ if [ -n "${WARMUP_ALIAS_NAME:-}" ]; then
 fi
 
 echo ""
-echo "✨ Provisioned concurrency allocation complete for function=$LAMBDA_FUNCTION_NAME"
+log info "✨ Provisioned concurrency allocation complete for function=$LAMBDA_FUNCTION_NAME"

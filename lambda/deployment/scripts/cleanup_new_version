@@ -2,7 +2,9 @@
 # Cleanup new Lambda version after rollback
 # This removes the failed version that was being deployed
 
-echo "🧹 Cleaning up failed deployment version..."
+source "$SERVICE_PATH/utils/log"
+
+log info "🧹 Cleaning up failed deployment version..."
 
 if [ -z "${LAMBDA_FUNCTION_NAME:-}" ]; then
   echo "❌ LAMBDA_FUNCTION_NAME is required" >&2
@@ -18,26 +20,26 @@ fi
 new_version="${LAMBDA_GREEN_VERSION:-${LAMBDA_NEW_VERSION:-${LAMBDA_CURRENT_VERSION:-}}}"
 
 if [ -z "$new_version" ] || [ "$new_version" = "null" ]; then
-  echo "   ⏭️  No new version specified to cleanup"
+  log info "   ⏭️  No new version specified to cleanup"
   return 0
 fi
 
 if [ "$new_version" = "\$LATEST" ]; then
-  echo "   ⏭️  Cannot delete \$LATEST"
+  log info "   ⏭️  Cannot delete \$LATEST"
   return 0
 fi
 
-echo "   ✅ function_name=$LAMBDA_FUNCTION_NAME"
-echo "   ✅ new_version=$new_version"
+log debug "   ✅ function_name=$LAMBDA_FUNCTION_NAME"
+log debug "   ✅ new_version=$new_version"
 
 echo ""
-echo "   📝 Deleting failed version $new_version from function $LAMBDA_FUNCTION_NAME..."
+log info "   📝 Deleting failed version $new_version from function $LAMBDA_FUNCTION_NAME..."
 
 aws lambda delete-function \
   --function-name "$LAMBDA_FUNCTION_NAME" \
   --qualifier "$new_version" \
   2>/dev/null || true
 
-echo "   ✅ Failed version $new_version cleanup complete"
+log debug "   ✅ Failed version $new_version cleanup complete"
 echo ""
-echo "✨ Cleanup finished for function=$LAMBDA_FUNCTION_NAME version=$new_version"
+log info "✨ Cleanup finished for function=$LAMBDA_FUNCTION_NAME version=$new_version"
