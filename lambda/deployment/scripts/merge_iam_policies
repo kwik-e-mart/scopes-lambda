@@ -12,7 +12,7 @@ if [ -z "${LAMBDA_ROLE_NAME:-}" ]; then
   echo "🔧 How to fix:" >&2
   echo "   - Verify the scope has a valid IAM role configured" >&2
   echo "   - Check that LAMBDA_ROLE_NAME is exported before this script runs" >&2
-  exit 1
+  return 1
 fi
 
 if [ -z "${DEPLOYMENT_ID:-}" ]; then
@@ -23,7 +23,7 @@ if [ -z "${DEPLOYMENT_ID:-}" ]; then
   echo "🔧 How to fix:" >&2
   echo "   - Ensure this script is called from within a nullplatform deployment flow" >&2
   echo "   - Check that DEPLOYMENT_ID is set in the environment" >&2
-  exit 1
+  return 1
 fi
 
 if [ -z "${SCOPE_NRN:-}" ]; then
@@ -34,7 +34,7 @@ if [ -z "${SCOPE_NRN:-}" ]; then
   echo "🔧 How to fix:" >&2
   echo "   - Verify SCOPE_NRN is exported before this script runs" >&2
   echo "   - Check the deployment agent configuration" >&2
-  exit 1
+  return 1
 fi
 
 echo "   ✅ role_name=$LAMBDA_ROLE_NAME"
@@ -48,7 +48,7 @@ policies=$(echo "$nrn_output" | jq -r '.AWS_LAMBDA_DEDICATED_ROLE_POLICIES // "[
 
 if [ "$policies" = "[]" ] || [ "$policies" = "null" ]; then
   echo "   ⏭️  No deployment-specific policies to merge"
-  exit 0
+  return 0
 fi
 
 policy_count=$(echo "$policies" | jq length)
@@ -79,7 +79,7 @@ for i in $(seq 0 $((policy_count - 1))); do
     echo "   - Validate the policy document JSON" >&2
     echo "   - Check the agent's IAM permissions include iam:PutRolePolicy" >&2
     echo "   📋 Error: $attach_output" >&2
-    exit 1
+    return 1
   fi
 
   echo "   ✅ Policy $full_policy_name attached successfully"

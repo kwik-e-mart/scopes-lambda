@@ -11,13 +11,7 @@ variable "test_api_gateway_target_zone_id" {
   default     = ""
 }
 
-variable "test_alb_host_header" {
-  description = "Test-only: Simulates ALB module output"
-  default     = ""
-}
-
 locals {
   api_gateway_target_domain  = var.test_api_gateway_target_domain
   api_gateway_target_zone_id = var.test_api_gateway_target_zone_id
-  alb_host_header            = var.test_alb_host_header
 }

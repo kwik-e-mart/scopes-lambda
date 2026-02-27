@@ -3,13 +3,20 @@
 echo "🔍 Validating ALB configuration..."
 
 # Check visibility - ALB is only for private scopes
-visibility=$(echo "$CONTEXT" | jq -r '.scope.visibility // "public"')
+visibility=$(echo "$CONTEXT" | jq -r '.scope.capabilities.visibility // "public"')
 
 if [ "$visibility" != "private" ] && [ "$visibility" != "internal" ]; then
   echo ""
   echo "   ⏭️  Skipping ALB - visibility is '$visibility' (not private/internal)"
   echo ""
-  return 0 2>/dev/null || exit 0
+  # Include ALB stubs so Route53 module always has alb_dns_name / alb_zone_id locals declared
+  alb_stubs="$SERVICE_PATH/deployment/dns/route53/stubs_no_alb"
+  if [[ -n ${MODULES_TO_USE:-} ]]; then
+    MODULES_TO_USE="$MODULES_TO_USE,$alb_stubs"
+  else
+    MODULES_TO_USE="$alb_stubs"
+  fi
+  return 0 2>/dev/null || return 0
 fi
 
 echo "   ✅ visibility=$visibility"
@@ -34,7 +41,7 @@ if [ -z "$alb_listener_arn" ]; then
   echo "    • Configure alb.listener_arn in the cloud-provider settings"
   echo "    • Or set ALB_LISTENER_ARN environment variable in Helm values"
   echo ""
-  exit 1
+  return 1
 fi
 
 echo "   ✅ alb_listener_arn=$alb_listener_arn"
@@ -46,26 +53,57 @@ application_slug=$(echo "$CONTEXT" | jq -r '.application.slug')
 namespace_slug=$(echo "$CONTEXT" | jq -r '.namespace.slug')
 
 # Target group name (max 32 chars for ALB)
-target_group_name="${namespace_slug:0:10}-${application_slug:0:10}-${scope_slug:0:8}"
+# scope_id guarantees uniqueness; app+scope slugs are for human readability in AWS console
+# Dashes removed from slugs to maximize readable chars within the 32-char limit
+# Format: {scope_id}-{app_nodash:9}-{scope_nodash:9}
+app_slug_nodash="${application_slug//-/}"
+scope_slug_nodash="${scope_slug//-/}"
+target_group_name="${scope_id}-${app_slug_nodash:0:9}-${scope_slug_nodash:0:9}"
 target_group_name="${target_group_name:0:32}"
 echo "   ✅ target_group_name=$target_group_name"
 
 # Host header for routing
-scope_domain=$(echo "$CONTEXT" | jq -r '.scope.domain // empty')
-if [ -z "$scope_domain" ] || [ "$scope_domain" = "null" ]; then
-  # Generate a default host header pattern
-  host_header="${application_slug}-${scope_slug}.internal"
-else
-  host_header="$scope_domain"
+# Prefer dns_full_domain from TOFU_VARIABLES (set by setup_dns which runs before setup_networking).
+# Fall back to scope.domain from context (set on previous deployments), then a generated pattern.
+host_header=$(echo "$TOFU_VARIABLES" | jq -r '.dns_full_domain // empty')
+if [ -z "$host_header" ] || [ "$host_header" = "null" ]; then
+  host_header=$(echo "$CONTEXT" | jq -r '.scope.domain // empty')
+fi
+if [ -z "$host_header" ] || [ "$host_header" = "null" ]; then
+  host_header="${namespace_slug}-${application_slug}-${scope_slug}.internal"
 fi
 echo "   ✅ host_header=$host_header"
 
-# Rule priority - get from context or use default
-rule_priority=$(echo "$CONTEXT" | jq -r '.scope.alb_rule_priority // empty')
-if [ -z "$rule_priority" ] || [ "$rule_priority" = "null" ]; then
-  rule_priority="${ALB_LISTENER_RULE_PRIORITY_START:-100}"
+# Rule priority - incremental assignment with NRN persistence
+# 1. NRN (re-deployments are idempotent, no race condition)
+# 2. Dynamic query to listener (first deployment; small race window, AWS rejects duplicates)
+rule_priority=""
+
+nrn_priority_output=$(np nrn read --nrn "$SCOPE_NRN" --ids "lambda.alb_rule_priority" --format json 2>/dev/null || echo "{}")
+if [ "$nrn_priority_output" != "{}" ]; then
+  rule_priority=$(echo "$nrn_priority_output" | jq -r '.namespaces.lambda.alb_rule_priority // empty')
 fi
-echo "   ✅ rule_priority=$rule_priority"
+
+if [ -n "$rule_priority" ] && [ "$rule_priority" != "null" ]; then
+  echo "   ✅ rule_priority=$rule_priority (from NRN)"
+else
+  priority_start="${ALB_LISTENER_RULE_PRIORITY_START:-100}"
+  echo "   📡 Querying listener for used priorities (range start: $priority_start)..."
+
+  used_priorities_json=$(aws elbv2 describe-rules \
+    --listener-arn "$alb_listener_arn" \
+    --output json 2>/dev/null | jq '[.Rules[] | select(.Priority != "default") | .Priority | tonumber]')
+
+  rule_priority="$priority_start"
+  while echo "$used_priorities_json" | jq -e --argjson p "$rule_priority" 'contains([$p])' > /dev/null 2>&1; do
+    rule_priority=$((rule_priority + 1))
+  done
+
+  echo "   ✅ rule_priority=$rule_priority (auto-assigned)"
+fi
+
+ALB_RULE_PRIORITY="$rule_priority"
+export ALB_RULE_PRIORITY
 
 # Health check configuration
 health_check_path=$(echo "$CONTEXT" | jq -r '.scope.capabilities.health_check.path // "/health"')
@@ -83,7 +121,7 @@ if [ -z "$lambda_function_name" ]; then
   echo ""
   echo "   ❌ Lambda function name not found in context"
   echo ""
-  exit 1
+  return 1
 fi
 
 echo "   ✅ lambda_function_name=$lambda_function_name"

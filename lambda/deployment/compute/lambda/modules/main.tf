@@ -1,7 +1,8 @@
 # Main Lambda Function
 resource "aws_lambda_function" "main" {
   function_name = var.lambda_function_name
-  role          = var.lambda_role_arn
+  description   = var.lambda_description
+  role          = local.lambda_role_arn
   package_type  = var.lambda_package_type
 
   # Deployment package from S3 (Zip only)

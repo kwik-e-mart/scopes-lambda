@@ -53,6 +53,3 @@ steps:
     output:
       - name: SCOPE_DOMAIN
         type: environment
-  - name: store_scope_metadata
-    type: script
-    file: "$SERVICE_PATH/scope/scripts/store_scope_metadata"

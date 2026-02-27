@@ -3,13 +3,20 @@
 echo "🔍 Validating API Gateway configuration..."
 
 # Check visibility - API Gateway is only for public scopes
-visibility=$(echo "$CONTEXT" | jq -r '.scope.visibility // "public"')
+visibility=$(echo "$CONTEXT" | jq -r '.scope.capabilities.visibility // "public"')
 
 if [ "$visibility" != "public" ]; then
   echo ""
   echo "   ⏭️  Skipping API Gateway - visibility is '$visibility' (not public)"
   echo ""
-  return 0 2>/dev/null || exit 0
+  # Include API Gateway stubs so Route53 module always has api_gateway_* locals declared
+  apigw_stubs="$SERVICE_PATH/deployment/dns/route53/stubs_no_api_gateway"
+  if [[ -n ${MODULES_TO_USE:-} ]]; then
+    MODULES_TO_USE="$MODULES_TO_USE,$apigw_stubs"
+  else
+    MODULES_TO_USE="$apigw_stubs"
+  fi
+  return 0 2>/dev/null || return 0
 fi
 
 echo "   ✅ visibility=public"
@@ -24,8 +31,11 @@ namespace_slug=$(echo "$CONTEXT" | jq -r '.namespace.slug')
 api_gateway_name="${namespace_slug}-${application_slug}-${scope_slug}"
 echo "   ✅ api_name=$api_gateway_name"
 
-# Stage name (default: main)
-stage_name="${API_GATEWAY_STAGE_NAME:-main}"
+# Stage name - "default" maps to AWS $default stage (no path prefix in requests)
+stage_name="${API_GATEWAY_STAGE_NAME:-default}"
+if [ "$stage_name" = "default" ]; then
+  stage_name='$default'
+fi
 echo "   ✅ stage_name=$stage_name"
 
 # Throttling settings
@@ -57,7 +67,7 @@ if [ -z "$lambda_function_name" ]; then
   echo "  💡 Possible causes:"
   echo "    • The compute/lambda layer was not set up before this layer"
   echo ""
-  exit 1
+  return 1
 fi
 
 echo "   ✅ lambda_function_name=$lambda_function_name"

@@ -28,7 +28,7 @@ if [ ${#missing_vars[@]} -gt 0 ]; then
     echo "      • $var"
   done
   echo ""
-  exit 1
+  return 1
 fi
 
 echo "✨ AWS provider configured successfully"

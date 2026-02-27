@@ -3,17 +3,31 @@
 echo "🔍 Validating Route53 DNS configuration..."
 
 # Get hosted zone ID from context
-hosted_zone_id=$(echo "$CONTEXT" | jq -r '.providers["cloud-providers"].networking.hosted_public_zone_id // empty')
+# For private/internal scopes, prefer hosted_zone_id if available; fall back to public zone.
+visibility=$(echo "$CONTEXT" | jq -r '.scope.capabilities.visibility // "public"')
+
+if [ "$visibility" = "private" ] || [ "$visibility" = "internal" ]; then
+  hosted_zone_id=$(echo "$CONTEXT" | jq -r '.providers["cloud-providers"].networking.hosted_zone_id // empty')
+  if [ -n "$hosted_zone_id" ] && [ "$hosted_zone_id" != "null" ]; then
+    echo "   ✅ Using private hosted zone (visibility=$visibility)"
+  else
+    # Fall back to public zone if no private zone is configured
+    hosted_zone_id=$(echo "$CONTEXT" | jq -r '.providers["cloud-providers"].networking.hosted_public_zone_id // empty')
+    echo "   ⚠️  No hosted_zone_id configured, falling back to public zone"
+  fi
+else
+  hosted_zone_id=$(echo "$CONTEXT" | jq -r '.providers["cloud-providers"].networking.hosted_public_zone_id // empty')
+fi
 
 if [ -z "$hosted_zone_id" ] || [ "$hosted_zone_id" = "null" ]; then
   echo ""
-  echo "   ❌ hosted_public_zone_id is not set in context"
+  echo "   ❌ No hosted zone ID configured"
   echo ""
   echo "  🔧 How to fix:"
   echo "    1. Ensure there is an AWS cloud-provider configured at the correct NRN hierarchy level"
-  echo "    2. Set the 'hosted_public_zone_id' field with the Route 53 hosted zone ID"
+  echo "    2. Set 'hosted_public_zone_id' (public scopes) or 'hosted_zone_id' (private/internal scopes)"
   echo ""
-  exit 1
+  return 1
 fi
 echo "   ✅ hosted_zone_id=$hosted_zone_id"
 
@@ -61,7 +75,7 @@ if [ $aws_exit_code -ne 0 ]; then
   fi
 
   echo ""
-  exit 1
+  return 1
 fi
 
 network_domain=$(echo "$aws_output" | jq -r '.HostedZone.Name' | sed 's/\.$//')
@@ -70,7 +84,7 @@ if [ -z "$network_domain" ] || [ "$network_domain" = "null" ]; then
   echo ""
   echo "   ❌ Failed to extract domain name from hosted zone response"
   echo ""
-  exit 1
+  return 1
 fi
 
 echo "   ✅ domain=$network_domain"
@@ -91,7 +105,7 @@ scope_domain="${network_subdomain}.${network_domain}"
 echo "   ✅ full_domain=$scope_domain"
 
 # Determine the DNS target based on visibility
-visibility=$(echo "$CONTEXT" | jq -r '.scope.visibility // "public"')
+visibility=$(echo "$CONTEXT" | jq -r '.scope.capabilities.visibility // "public"')
 
 # These will be set by the networking layer via terraform locals
 # For API Gateway: api_gateway_target_domain, api_gateway_target_zone_id
@@ -108,6 +122,30 @@ TOFU_VARIABLES=$(echo "$TOFU_VARIABLES" | jq \
     dns_subdomain: $subdomain,
     dns_full_domain: $full_domain
   }')
+
+# Configure API Gateway custom domain if API Gateway is being used
+api_gateway_name=$(echo "$TOFU_VARIABLES" | jq -r '.api_gateway_name // empty')
+if [ -n "$api_gateway_name" ]; then
+  cert_arn="${CERTIFICATE_ARN:-}"
+
+  if [ -n "$cert_arn" ]; then
+    echo "   ✅ certificate_arn=$cert_arn"
+    echo "   📝 Configuring API Gateway custom domain: $scope_domain"
+
+    TOFU_VARIABLES=$(echo "$TOFU_VARIABLES" | jq \
+      --arg domain "$scope_domain" \
+      --arg cert "$cert_arn" \
+      '. + {
+        api_gateway_custom_domain: $domain,
+        api_gateway_certificate_arn: $cert,
+        dns_use_api_gateway: true,
+        dns_use_api_gateway_cname: false
+      }')
+  else
+    echo "   ⚠️  CERTIFICATE_ARN not set - using CNAME to execute-api endpoint (no custom SSL)"
+    TOFU_VARIABLES=$(echo "$TOFU_VARIABLES" | jq '. + {dns_use_api_gateway_cname: true}')
+  fi
+fi
 
 echo ""
 echo "   📝 Setting scope domain to '$scope_domain'..."
@@ -132,7 +170,7 @@ if [ $np_exit_code -ne 0 ]; then
   fi
 
   echo ""
-  exit 1
+  return 1
 fi
 
 echo "   ✅ Scope domain set successfully"

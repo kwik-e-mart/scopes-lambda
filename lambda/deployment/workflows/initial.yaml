@@ -15,6 +15,12 @@ steps:
         type: environment
       - name: LAMBDA_FUNCTION_NAME
         type: environment
+      - name: LAMBDA_CURRENT_VERSION
+        type: environment
+      - name: LAMBDA_GREEN_VERSION
+        type: environment
+      - name: LAMBDA_BLUE_VERSION
+        type: environment
       - name: VISIBILITY
         type: environment
       - name: OUTPUT_DIR
@@ -64,6 +70,14 @@ steps:
         type: environment
       - name: MODULES_TO_USE
         type: environment
+  - name: setup_dns
+    type: script
+    file: "$SERVICE_PATH/deployment/dns/route53/setup"
+    output:
+      - name: TOFU_VARIABLES
+        type: environment
+      - name: MODULES_TO_USE
+        type: environment
   - name: setup_networking
     type: workflow
     steps:
@@ -83,14 +97,8 @@ steps:
             type: environment
           - name: MODULES_TO_USE
             type: environment
-  - name: setup_dns
-    type: script
-    file: "$SERVICE_PATH/deployment/dns/route53/setup"
-    output:
-      - name: TOFU_VARIABLES
-        type: environment
-      - name: MODULES_TO_USE
-        type: environment
+          - name: ALB_RULE_PRIORITY
+            type: environment
   - name: compose_modules
     type: script
     file: "$SERVICE_PATH/deployment/compose_modules"
@@ -101,6 +109,8 @@ steps:
       - name: LAMBDA_FUNCTION_ARN
         type: environment
       - name: LAMBDA_CURRENT_VERSION
+        type: environment
+      - name: ALB_RULE_ARN
         type: environment
   - name: wait_provisioned_concurrency
     type: script

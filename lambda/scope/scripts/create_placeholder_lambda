@@ -13,7 +13,7 @@ if [ -z "${LAMBDA_FUNCTION_NAME:-}" ]; then
   echo "🔧 How to fix:" >&2
   echo "   - Ensure build_context runs before this script" >&2
   echo "   - Check that LAMBDA_FUNCTION_NAME is exported" >&2
-  exit 1
+  return 1
 fi
 
 if [ -z "${LAMBDA_ROLE_ARN:-}" ]; then
@@ -24,7 +24,7 @@ if [ -z "${LAMBDA_ROLE_ARN:-}" ]; then
   echo "🔧 How to fix:" >&2
   echo "   - Ensure create_iam_role runs before this script" >&2
   echo "   - Check that LAMBDA_ROLE_ARN is exported" >&2
-  exit 1
+  return 1
 fi
 
 if [ -z "${OUTPUT_DIR:-}" ]; then
@@ -33,7 +33,7 @@ if [ -z "${OUTPUT_DIR:-}" ]; then
   echo "   - The scope runner did not set a working directory" >&2
   echo "🔧 How to fix:" >&2
   echo "   - Ensure OUTPUT_DIR is exported before running this script" >&2
-  exit 1
+  return 1
 fi
 
 echo "   📋 function_name=$LAMBDA_FUNCTION_NAME"
@@ -66,7 +66,7 @@ if ! echo "$existing_function" | grep -q "ResourceNotFoundException\|NOT_FOUND";
   export LAMBDA_FUNCTION_ARN
 
   echo "   📋 function_arn=$LAMBDA_FUNCTION_ARN"
-  exit 0
+  return 0
 fi
 
 # Skip placeholder creation for container image deployments
@@ -82,67 +82,19 @@ if [ "$package_type" = "Image" ]; then
 
   echo ""
   echo "✨ Placeholder skipped for container image scope: function_name=$LAMBDA_FUNCTION_NAME"
-  exit 0
+  return 0
 fi
 
-# Create placeholder code
+# Create placeholder zip from embedded base64
+# Contains index.js with a minimal Node.js handler (compatible with all runtimes as placeholder)
 echo ""
-echo "   📝 Creating placeholder code..."
+echo "   📝 Creating placeholder zip..."
 
-placeholder_dir="$OUTPUT_DIR/placeholder"
-mkdir -p "$placeholder_dir"
-
-# Create simple placeholder handler based on runtime
-case "$runtime" in
-  nodejs*)
-    cat > "$placeholder_dir/index.js" << 'EOF'
-exports.handler = async (event) => {
-  return {
-    statusCode: 200,
-    body: JSON.stringify({
-      message: 'Placeholder Lambda - awaiting deployment',
-      timestamp: new Date().toISOString()
-    })
-  };
-};
-EOF
-    ;;
-  python*)
-    cat > "$placeholder_dir/lambda_function.py" << 'EOF'
-import json
-from datetime import datetime
-
-def lambda_handler(event, context):
-    return {
-        'statusCode': 200,
-        'body': json.dumps({
-            'message': 'Placeholder Lambda - awaiting deployment',
-            'timestamp': datetime.utcnow().isoformat()
-        })
-    }
-EOF
-    ;;
-  *)
-    # Default to Node.js
-    cat > "$placeholder_dir/index.js" << 'EOF'
-exports.handler = async (event) => {
-  return {
-    statusCode: 200,
-    body: JSON.stringify({
-      message: 'Placeholder Lambda - awaiting deployment',
-      timestamp: new Date().toISOString()
-    })
-  };
-};
-EOF
-    ;;
-esac
-
-# Create zip file
 zip_file="$OUTPUT_DIR/placeholder.zip"
-(cd "$placeholder_dir" && zip -q -r "$zip_file" .)
+echo "UEsDBBQAAAAIABJ3V1wwajY9igAAAJ8AAAAIABwAaW5kZXguanNVVAkAA9SUnGnUlJxpdXgLAAEE9QEAAAQUAAAAHY1BCoMwFET3nmJ2KrQiXVrspjspbaEn+JpfFWIiybdtEO/eIMxiGB7z+DdbJ74YyCjNDjXIB9Mh4w8byVFfsCaAY1mc2SvghWTxV6u4wqksD/vYWhUqNK/HvfDiRtOP75CtmNh76iOYPjV1PFitouVGU6sIR9CXRokwFM/ahik6U2x5fNzOScwfUEsBAh4DFAAAAAgAEndXXDBqNj2KAAAAnwAAAAgAGAAAAAAAAQAAAKSBAAAAAGluZGV4LmpzVVQFAAPUlJxpdXgLAAEE9QEAAAQUAAAAUEsFBgAAAAABAAEATgAAAMwAAAAAAA==" \
+  | base64 -d > "$zip_file"
 
-echo "   ✅ Placeholder code created and packaged"
+echo "   ✅ Placeholder zip ready"
 
 # Create the Lambda function
 echo ""
@@ -221,12 +173,12 @@ else
   echo "   - AWS error: $create_output" >&2
 
   # Rollback: clean up temporary files
-  rm -rf "$placeholder_dir" "$zip_file"
+  rm -f "$zip_file"
 
   echo "🔄 Rolling back: cleaning up resources..." >&2
   # The caller should handle IAM role cleanup based on this exit code
   # We only clean up resources created in this script
-  exit 1
+  return 1
 fi
 
 # Create main alias
@@ -245,7 +197,7 @@ alias_output=$(aws lambda create-alias \
 echo "   ✅ Alias '$alias_name' created for function $LAMBDA_FUNCTION_NAME"
 
 # Cleanup temporary files
-rm -rf "$placeholder_dir" "$zip_file"
+rm -f "$zip_file"
 
 # Export function ARN
 export LAMBDA_FUNCTION_ARN

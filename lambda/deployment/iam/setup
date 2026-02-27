@@ -14,18 +14,22 @@ role_policies="[]"
 role_entity="scope"
 existing_role_arn=""
 existing_role_name=""
+execution_role_arn=""
 
 # Read NRN configuration for IAM
-nrn_output=$(np nrn read --nrn "$scope_nrn" --namespace aws --format json 2>&1)
+nrn_output=$(np nrn read --nrn "$scope_nrn" --ids "lambda.aws_lambda_execution_role_arn,lambda.aws_lambda_use_dedicated_role,lambda.aws_lambda_dedicated_role_name_template,lambda.aws_lambda_dedicated_role_policies,lambda.aws_lambda_dedicated_role_entity,lambda.aws_dedicated_role_arn,lambda.aws_dedicated_role_name" --format json 2>&1)
+echo "NRN: $nrn_output"
+
 nrn_exit_code=$?
 
 if [ $nrn_exit_code -eq 0 ]; then
-  use_dedicated_role=$(echo "$nrn_output" | jq -r '.AWS_LAMBDA_USE_DEDICATED_ROLE // "false"')
-  role_name_template=$(echo "$nrn_output" | jq -r '.AWS_LAMBDA_DEDICATED_ROLE_NAME_TEMPLATE // ""')
-  role_policies=$(echo "$nrn_output" | jq -r '.AWS_LAMBDA_DEDICATED_ROLE_POLICIES // "[]"')
-  role_entity=$(echo "$nrn_output" | jq -r '.AWS_LAMBDA_DEDICATED_ROLE_ENTITY // "scope"')
-  existing_role_arn=$(echo "$nrn_output" | jq -r '.AWS_DEDICATED_ROLE_ARN // ""')
-  existing_role_name=$(echo "$nrn_output" | jq -r '.AWS_DEDICATED_ROLE_NAME // ""')
+  use_dedicated_role=$(echo "$nrn_output" | jq -r '.namespaces.lambda.aws_lambda_use_dedicated_role // "false"')
+  role_name_template=$(echo "$nrn_output" | jq -r '.namespaces.lambda.aws_lambda_dedicated_role_name_template // ""')
+  role_policies=$(echo "$nrn_output" | jq -r '.namespaces.lambda.aws_lambda_dedicated_role_policies // "[]"')
+  role_entity=$(echo "$nrn_output" | jq -r '.namespaces.lambda.aws_lambda_dedicated_role_entity // "scope"')
+  existing_role_arn=$(echo "$nrn_output" | jq -r '.namespaces.lambda.aws_dedicated_role_arn // ""')
+  existing_role_name=$(echo "$nrn_output" | jq -r '.namespaces.lambda.aws_dedicated_role_name // ""')
+  execution_role_arn=$(echo "$nrn_output" | jq -r '.namespaces.lambda.aws_lambda_execution_role_arn // ""')
 fi
 
 echo "   ✅ use_dedicated_role=$use_dedicated_role"
@@ -33,7 +37,7 @@ echo "   ✅ role_entity=$role_entity"
 
 # If not using dedicated role, check for existing role ARN in context
 if [ "$use_dedicated_role" != "true" ]; then
-  lambda_role_arn=$(echo "$CONTEXT" | jq -r '.lambda.role_arn // empty')
+  lambda_role_arn=$execution_role_arn
 
   if [ -z "$lambda_role_arn" ] || [ "$lambda_role_arn" = "null" ]; then
     lambda_role_arn=$(echo "$CONTEXT" | jq -r '.providers["cloud-providers"].lambda.execution_role_arn // empty')
@@ -50,7 +54,7 @@ if [ "$use_dedicated_role" != "true" ]; then
     echo "    • Enable dedicated roles via NRN configuration"
     echo "    • Or configure lambda.execution_role_arn in the cloud-provider"
     echo ""
-    exit 1
+    return 1
   fi
 
   echo "   ✅ Using existing role: $lambda_role_arn"
@@ -63,7 +67,17 @@ if [ "$use_dedicated_role" != "true" ]; then
   echo ""
   echo "✨ IAM configured (using existing role)"
   echo ""
-  return 0 2>/dev/null || exit 0
+
+  # Add module to composition list (needed for cross-module lambda_role_arn local)
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  module_name="${script_dir}/modules"
+  if [[ -n $MODULES_TO_USE ]]; then
+    MODULES_TO_USE="$MODULES_TO_USE,$module_name"
+  else
+    MODULES_TO_USE="$module_name"
+  fi
+
+  return 0 2>/dev/null || return 0
 fi
 
 # Using dedicated role - validate required fields
@@ -74,7 +88,7 @@ if [ -z "$role_name_template" ] || [ "$role_name_template" = "null" ] || [ "$rol
   echo "  🔧 How to fix:"
   echo "    Set AWS_LAMBDA_DEDICATED_ROLE_NAME_TEMPLATE in NRN configuration"
   echo ""
-  exit 1
+  return 1
 fi
 
 if [ "$role_policies" = "[]" ] || [ "$role_policies" = "null" ]; then
@@ -84,7 +98,7 @@ if [ "$role_policies" = "[]" ] || [ "$role_policies" = "null" ]; then
   echo "  🔧 How to fix:"
   echo "    Set AWS_LAMBDA_DEDICATED_ROLE_POLICIES in NRN configuration"
   echo ""
-  exit 1
+  return 1
 fi
 
 echo "   ✅ role_name_template=$role_name_template"

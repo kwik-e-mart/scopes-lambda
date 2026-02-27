@@ -17,7 +17,7 @@ if [ -z "$SCOPE_ID" ] || [ "$SCOPE_ID" = "null" ]; then
   echo "   - The scope object is missing from the context payload" >&2
   echo "🔧 How to fix:" >&2
   echo "   - Verify the CONTEXT environment variable contains valid JSON with .scope.id" >&2
-  exit 1
+  return 1
 fi
 
 if [ -z "$DEPLOYMENT_ID" ] || [ "$DEPLOYMENT_ID" = "null" ]; then
@@ -26,7 +26,7 @@ if [ -z "$DEPLOYMENT_ID" ] || [ "$DEPLOYMENT_ID" = "null" ]; then
   echo "   - CONTEXT variable is missing the deployment object" >&2
   echo "🔧 How to fix:" >&2
   echo "   - Verify the CONTEXT environment variable contains valid JSON with .deployment.id" >&2
-  exit 1
+  return 1
 fi
 
 echo "   ✅ scope_id=$SCOPE_ID"
@@ -62,24 +62,30 @@ echo "   📡 Reading Lambda metadata from NRN..."
 LAMBDA_FUNCTION_ARN=""
 LAMBDA_ROLE_ARN=""
 LAMBDA_CURRENT_VERSION=""
+LAMBDA_GREEN_VERSION=""
+LAMBDA_BLUE_VERSION=""
 LAMBDA_MAIN_ALIAS_NAME="${LAMBDA_MAIN_ALIAS_NAME:-main}"
 
-nrn_output=$(np nrn read --nrn "$SCOPE_NRN" --namespace aws --format json 2>&1 || echo "{}")
+# Determine deployment IDs before NRN read so we can fetch per-deployment versions
+BLUE_DEPLOYMENT_ID=$(echo "$CONTEXT" | jq -r '.scope.current_active_deployment // ""')
+
+nrn_ids="lambda.lambda_function_arn,lambda.lambda_role_arn,lambda.lambda_function_main_alias,lambda.lambda_current_reserved_concurrency_type,lambda.lambda_current_reserved_concurrency_value,lambda.lambda_current_provisioned_concurrency_type,lambda.lambda_current_provisioned_concurrency_value"
+
+nrn_output=$(np nrn read --nrn "$SCOPE_NRN" --ids "$nrn_ids" --format json 2>&1 || echo "{}")
 
 if [ "$nrn_output" != "{}" ]; then
-  LAMBDA_FUNCTION_ARN=$(echo "$nrn_output" | jq -r '.LAMBDA_FUNCTION_ARN // ""')
-  LAMBDA_ROLE_ARN=$(echo "$nrn_output" | jq -r '.LAMBDA_ROLE_ARN // ""')
-  LAMBDA_CURRENT_VERSION=$(echo "$nrn_output" | jq -r '.LAMBDA_FUNCTION_CURRENT_VERSION // ""')
-  stored_alias=$(echo "$nrn_output" | jq -r '.LAMBDA_FUNCTION_MAIN_ALIAS // ""')
+  LAMBDA_FUNCTION_ARN=$(echo "$nrn_output" | jq -r '.namespaces.lambda.lambda_function_arn // ""')
+  LAMBDA_ROLE_ARN=$(echo "$nrn_output" | jq -r '.namespaces.lambda.lambda_role_arn // ""')
+  stored_alias=$(echo "$nrn_output" | jq -r '.namespaces.lambda.lambda_function_main_alias // ""')
   if [ -n "$stored_alias" ] && [ "$stored_alias" != "null" ]; then
     LAMBDA_MAIN_ALIAS_NAME="$stored_alias"
   fi
 
   # Read current concurrency state for rollback tracking
-  LAMBDA_CURRENT_RESERVED_CONCURRENCY_TYPE=$(echo "$nrn_output" | jq -r '.LAMBDA_CURRENT_RESERVED_CONCURRENCY_TYPE // ""')
-  LAMBDA_CURRENT_RESERVED_CONCURRENCY_VALUE=$(echo "$nrn_output" | jq -r '.LAMBDA_CURRENT_RESERVED_CONCURRENCY_VALUE // ""')
-  LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_TYPE=$(echo "$nrn_output" | jq -r '.LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_TYPE // ""')
-  LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_VALUE=$(echo "$nrn_output" | jq -r '.LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_VALUE // ""')
+  LAMBDA_CURRENT_RESERVED_CONCURRENCY_TYPE=$(echo "$nrn_output" | jq -r '.namespaces.lambda.lambda_current_reserved_concurrency_type // ""')
+  LAMBDA_CURRENT_RESERVED_CONCURRENCY_VALUE=$(echo "$nrn_output" | jq -r '.namespaces.lambda.lambda_current_reserved_concurrency_value // ""')
+  LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_TYPE=$(echo "$nrn_output" | jq -r '.namespaces.lambda.lambda_current_provisioned_concurrency_type // ""')
+  LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_VALUE=$(echo "$nrn_output" | jq -r '.namespaces.lambda.lambda_current_provisioned_concurrency_value // ""')
 else
   LAMBDA_CURRENT_RESERVED_CONCURRENCY_TYPE=""
   LAMBDA_CURRENT_RESERVED_CONCURRENCY_VALUE=""
@@ -87,14 +93,40 @@ else
   LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_VALUE=""
 fi
 
+# Look up Lambda versions by deployment ID (each published version embeds the deployment ID as description)
+echo "   📡 Looking up Lambda versions by deployment ID..."
+_versions_raw=$(aws lambda list-versions-by-function \
+  --function-name "$LAMBDA_FUNCTION_NAME" \
+  --output json 2>/dev/null || echo '{"Versions":[]}')
+
+LAMBDA_GREEN_VERSION=$(echo "$_versions_raw" | jq -r \
+  --arg id "$DEPLOYMENT_ID" \
+  '[.Versions // [] | .[] | select(.Description == $id) | .Version | select(test("^[0-9]+$"))] | last // ""')
+
+if [ -n "$BLUE_DEPLOYMENT_ID" ]; then
+  LAMBDA_BLUE_VERSION=$(echo "$_versions_raw" | jq -r \
+    --arg id "$BLUE_DEPLOYMENT_ID" \
+    '[.Versions // [] | .[] | select(.Description == $id) | .Version | select(test("^[0-9]+$"))] | last // ""')
+fi
+
+# LAMBDA_CURRENT_VERSION: set from green version or will be overwritten by do_tofu output
+LAMBDA_CURRENT_VERSION="$LAMBDA_GREEN_VERSION"
+
 if [ -n "$LAMBDA_FUNCTION_ARN" ] && [ "$LAMBDA_FUNCTION_ARN" != "null" ]; then
   echo "   ✅ Found existing Lambda: $LAMBDA_FUNCTION_ARN"
 else
   echo "   ✅ No existing Lambda found (initial deployment)"
 fi
 
+if [ -n "$LAMBDA_GREEN_VERSION" ]; then
+  echo "   ✅ green_version[$DEPLOYMENT_ID]=$LAMBDA_GREEN_VERSION"
+fi
+if [ -n "$LAMBDA_BLUE_VERSION" ]; then
+  echo "   ✅ blue_version[$BLUE_DEPLOYMENT_ID]=$LAMBDA_BLUE_VERSION"
+fi
+
 # Get visibility to determine networking layer
-VISIBILITY=$(echo "$CONTEXT" | jq -r '.scope.visibility // "public"')
+VISIBILITY=$(echo "$CONTEXT" | jq -r '.scope.capabilities.visibility // "public"')
 echo "   ✅ visibility=$VISIBILITY"
 
 echo "   ✅ strategy=$DEPLOYMENT_STRATEGY"
@@ -102,10 +134,8 @@ echo "   ✅ desired_traffic=$DESIRED_TRAFFIC"
 
 # Check if this is blue-green deployment
 IS_BLUE_GREEN="false"
-BLUE_DEPLOYMENT_ID=""
 if [ "$DEPLOYMENT_STRATEGY" = "blue_green" ] || [ "$DEPLOYMENT_STRATEGY" = "BLUE_GREEN" ]; then
   IS_BLUE_GREEN="true"
-  BLUE_DEPLOYMENT_ID=$(echo "$CONTEXT" | jq -r '.scope.current_active_deployment // ""')
   echo "   ✅ blue_deployment_id=$BLUE_DEPLOYMENT_ID"
 fi
 
@@ -119,20 +149,7 @@ AWS_REGION=$(get_config_value \
   --default "us-east-1"
 )
 echo "   ✅ aws_region=$AWS_REGION"
-
-AWS_ACCESS_KEY_ID=$(echo "$CONTEXT" | jq -r '.providers["cloud-providers"].credentials.access_key_id // ""')
-AWS_SECRET_ACCESS_KEY=$(echo "$CONTEXT" | jq -r '.providers["cloud-providers"].credentials.secret_access_key // ""')
-
-if [ -z "$AWS_ACCESS_KEY_ID" ] || [ "$AWS_ACCESS_KEY_ID" = "null" ]; then
-  echo "❌ Missing AWS access key from cloud-providers" >&2
-  echo "💡 Possible causes:" >&2
-  echo "   - The cloud-providers provider is not configured for this scope" >&2
-  echo "   - Credentials are missing from the provider configuration" >&2
-  echo "🔧 How to fix:" >&2
-  echo "   - Ensure the cloud-providers provider is linked to the scope with valid AWS credentials" >&2
-  exit 1
-fi
-echo "   ✅ aws_credentials=configured"
+echo "   ✅ aws_credentials=service_account"
 
 # Extract assets-repository credentials for S3 access
 ASSETS_ACCESS_KEY_ID=$(echo "$CONTEXT" | jq -r '.providers["assets-repository"].credentials.access_key_id // ""')
@@ -267,7 +284,7 @@ if [ "$ASSET_TYPE" = "docker-image" ]; then
     echo "🔧 How to fix:" >&2
     echo "   - Verify the build pipeline pushes the image to ECR and sets asset.url" >&2
     echo "   - Expected format: {account}.dkr.ecr.{region}.amazonaws.com/{repo}:{tag}" >&2
-    exit 1
+    return 1
   fi
 else
   # Zip deployment (S3)
@@ -288,7 +305,7 @@ else
       echo "🔧 How to fix:" >&2
       echo "   - Verify the asset was uploaded correctly to S3" >&2
       echo "   - Expected format: s3://bucket-name/path/to/asset.zip" >&2
-      exit 1
+      return 1
     fi
   else
     echo "   ✅ asset_url=not provided (may be set later)"
@@ -545,6 +562,8 @@ export LAMBDA_FUNCTION_NAME
 export LAMBDA_FUNCTION_ARN
 export LAMBDA_ROLE_ARN
 export LAMBDA_CURRENT_VERSION
+export LAMBDA_GREEN_VERSION
+export LAMBDA_BLUE_VERSION
 export LAMBDA_MAIN_ALIAS_NAME
 export VISIBILITY
 export DEPLOYMENT_STRATEGY
@@ -552,8 +571,6 @@ export DESIRED_TRAFFIC
 export IS_BLUE_GREEN
 export BLUE_DEPLOYMENT_ID
 export AWS_REGION
-export AWS_ACCESS_KEY_ID
-export AWS_SECRET_ACCESS_KEY
 export ASSETS_ACCESS_KEY_ID
 export ASSETS_SECRET_ACCESS_KEY
 export ASSETS_REGION
@@ -595,6 +612,10 @@ export TOFU_INIT_VARIABLES
 export MODULES_TO_USE
 export CONTEXT
 export RESOURCE_TAGS_JSON
+
+# Dump context to file for debugging
+echo "$CONTEXT" | jq '.' > "$OUTPUT_DIR/context.json"
+echo "   📄 Context dumped to $OUTPUT_DIR/context.json"
 
 echo ""
 echo "✨ Deployment context built successfully"

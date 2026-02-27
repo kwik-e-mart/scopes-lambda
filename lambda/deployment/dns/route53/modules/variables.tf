@@ -23,3 +23,21 @@ variable "dns_resource_tags_json" {
   type        = map(string)
   default     = {}
 }
+
+variable "dns_alb_host_header" {
+  description = "ALB DNS name for CNAME record; empty to skip ALB DNS record"
+  type        = string
+  default     = ""
+}
+
+variable "dns_use_api_gateway_cname" {
+  description = "Whether to create a CNAME record to the API Gateway default endpoint (no custom domain)"
+  type        = bool
+  default     = false
+}
+
+variable "dns_use_api_gateway" {
+  description = "Whether to create an A alias record for API Gateway with custom domain"
+  type        = bool
+  default     = false
+}

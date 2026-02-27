@@ -8,17 +8,37 @@ echo "📋 Lambda function: $LAMBDA_FUNCTION_NAME"
 
 echo "📋 Working directory: $TF_WORKING_DIR"
 
+# Verify tofu is installed
+if ! command -v tofu &> /dev/null; then
+  echo ""
+  echo "❌ OpenTofu (tofu) is not installed or not found in PATH"
+  echo ""
+  echo "💡 Possible causes:"
+  echo "   - The agent container image does not include the tofu binary"
+  echo "   - PATH does not include the tofu installation directory"
+  echo ""
+  echo "🔧 How to fix:"
+  echo "   - Add OpenTofu to the agent container image"
+  echo "   - Installation guide: https://opentofu.org/docs/intro/install/"
+  echo "   - Verify with: which tofu"
+  echo ""
+  return 1
+fi
+
+tofu_version=$(tofu version 2>&1 | head -1)
+echo "   ✅ tofu=$tofu_version"
+
 # Verify working directory has terraform files
 if [ ! -d "$TF_WORKING_DIR" ]; then
   echo "❌ Working directory does not exist: $TF_WORKING_DIR"
-  exit 1
+  return 1
 fi
 
 tf_file_count=$(ls "$TF_WORKING_DIR"/*.tf 2>/dev/null | wc -l | tr -d ' ')
 if [ "$tf_file_count" -eq 0 ]; then
   echo "❌ No .tf files found in $TF_WORKING_DIR"
   echo "   Did you run compose_modules first?"
-  exit 1
+  return 1
 fi
 
 echo "📋 Found $tf_file_count .tf files"
@@ -36,9 +56,56 @@ fi
 echo "📝 Initializing tofu..."
 tofu -chdir="$TF_WORKING_DIR" init -input=false $TOFU_INIT_VARIABLES
 
+# Import placeholder resources that exist in AWS but not in Tofu state
+# Scope creation creates a placeholder Lambda function + alias via AWS CLI outside of Tofu state.
+# On initial deployment, we need to import them to avoid 409 ResourceConflictException.
+if [ "$TOFU_ACTION" = "apply" ]; then
+  echo ""
+  echo "📝 Checking for resources to import..."
+
+  main_alias_name=$(echo "$TOFU_VARIABLES" | jq -r '.lambda_main_alias_name // "main"')
+
+  # Import Lambda function
+  if ! tofu -chdir="$TF_WORKING_DIR" state show aws_lambda_function.main &>/dev/null; then
+    if aws lambda get-function --function-name "$LAMBDA_FUNCTION_NAME" &>/dev/null 2>&1; then
+      echo "   📡 Importing existing Lambda function: $LAMBDA_FUNCTION_NAME"
+      tofu -chdir="$TF_WORKING_DIR" import -var-file="$TOFU_VAR_FILE" aws_lambda_function.main "$LAMBDA_FUNCTION_NAME"
+      echo "   ✅ Lambda function imported"
+    fi
+  fi
+
+  # Import main alias
+  if ! tofu -chdir="$TF_WORKING_DIR" state show aws_lambda_alias.main &>/dev/null; then
+    if aws lambda get-alias --function-name "$LAMBDA_FUNCTION_NAME" --name "$main_alias_name" &>/dev/null 2>&1; then
+      echo "   📡 Importing existing Lambda alias: $LAMBDA_FUNCTION_NAME/$main_alias_name"
+      tofu -chdir="$TF_WORKING_DIR" import -var-file="$TOFU_VAR_FILE" aws_lambda_alias.main "$LAMBDA_FUNCTION_NAME/$main_alias_name"
+      echo "   ✅ Lambda alias imported"
+    fi
+  fi
+
+  # Import CloudWatch log group (auto-created on first Lambda invocation)
+  log_group_name="/aws/lambda/$LAMBDA_FUNCTION_NAME"
+  if ! tofu -chdir="$TF_WORKING_DIR" state show aws_cloudwatch_log_group.lambda &>/dev/null; then
+    if aws logs describe-log-groups --log-group-name-prefix "$log_group_name" \
+        --query "logGroups[?logGroupName=='$log_group_name'] | [0].logGroupName" \
+        --output text 2>/dev/null | grep -q "$log_group_name"; then
+      echo "   📡 Importing existing CloudWatch log group: $log_group_name"
+      tofu -chdir="$TF_WORKING_DIR" import -var-file="$TOFU_VAR_FILE" aws_cloudwatch_log_group.lambda "$log_group_name"
+      echo "   ✅ CloudWatch log group imported"
+    fi
+  fi
+fi
+
 # Run tofu action
 echo "📝 Running tofu $TOFU_ACTION..."
-tofu -chdir="$TF_WORKING_DIR" "$TOFU_ACTION" -auto-approve -var-file="$TOFU_VAR_FILE"
+tofu_exit_code=0
+tofu -chdir="$TF_WORKING_DIR" "$TOFU_ACTION" -auto-approve -var-file="$TOFU_VAR_FILE" || tofu_exit_code=$?
+if [ $tofu_exit_code -ne 0 ]; then
+  echo ""
+  echo "❌ Tofu $TOFU_ACTION failed with exit code $tofu_exit_code"
+  echo ""
+  return 1
+fi
 
 echo "✅ Tofu $TOFU_ACTION completed successfully"
 
@@ -75,6 +142,12 @@ if [ "$TOFU_ACTION" = "apply" ]; then
     if [ -n "$API_GATEWAY_ENDPOINT" ]; then
       echo "   ✅ api_gateway_endpoint=$API_GATEWAY_ENDPOINT"
       export API_GATEWAY_ENDPOINT
+    fi
+
+    ALB_RULE_ARN=$(echo "$outputs" | jq -r '.alb_listener_rule_arn.value // empty')
+    if [ -n "$ALB_RULE_ARN" ]; then
+      echo "   ✅ alb_listener_rule_arn=$ALB_RULE_ARN"
+      export ALB_RULE_ARN
     fi
   fi
 fi

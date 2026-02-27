@@ -119,7 +119,7 @@ teardown() {
 }
 
 @test "scope/build_context: defaults visibility to public" {
-  export CONTEXT=$(echo "$MOCK_CONTEXT_PUBLIC" | jq 'del(.scope.visibility)')
+  export CONTEXT=$(echo "$MOCK_CONTEXT_PUBLIC" | jq 'del(.scope.capabilities.visibility)')
   export NP_OUTPUT_DIR="$(mktemp -d)"
   _TEST_CLEANUP_DIRS+=("$NP_OUTPUT_DIR")
 

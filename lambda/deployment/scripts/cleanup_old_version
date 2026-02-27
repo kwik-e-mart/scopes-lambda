@@ -12,24 +12,20 @@ if [ -z "${LAMBDA_FUNCTION_NAME:-}" ]; then
   echo "🔧 How to fix:" >&2
   echo "   - Ensure the scope has a valid Lambda function configured" >&2
   echo "   - Check that LAMBDA_FUNCTION_NAME is exported before this script runs" >&2
-  exit 1
+  return 1
 fi
 
-old_version=""
-
-if [ -n "${SCOPE_NRN:-}" ]; then
-  nrn_output=$(np nrn read --nrn "$SCOPE_NRN" --namespace aws --format json 2>&1 || echo "{}")
-  old_version=$(echo "$nrn_output" | jq -r '.LAMBDA_FUNCTION_PREVIOUS_VERSION // ""')
-fi
+# Blue version = Lambda version of the previously active deployment (now superseded)
+old_version="${LAMBDA_BLUE_VERSION:-}"
 
 if [ -z "$old_version" ] || [ "$old_version" = "null" ] || [ "$old_version" = "" ]; then
   echo "   ⏭️  No previous version found to cleanup"
-  exit 0
+  return 0
 fi
 
 if [ "$old_version" = "\$LATEST" ] || [ "$old_version" = "1" ]; then
   echo "   ⏭️  Skipping deletion of version $old_version (protected)"
-  exit 0
+  return 0
 fi
 
 echo "   ✅ function_name=$LAMBDA_FUNCTION_NAME"

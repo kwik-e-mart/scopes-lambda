@@ -1,3 +1,12 @@
+# Look up the ALB from the listener to expose its DNS name/zone_id for Route53
+data "aws_lb_listener" "main" {
+  arn = var.alb_listener_arn
+}
+
+data "aws_lb" "main" {
+  arn = data.aws_lb_listener.main.load_balancer_arn
+}
+
 # Lambda target group
 resource "aws_lb_target_group" "lambda" {
   name        = var.alb_target_group_name
