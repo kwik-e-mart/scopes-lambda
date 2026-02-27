@@ -69,12 +69,36 @@ if [ -z "$host_header" ] || [ "$host_header" = "null" ]; then
 fi
 echo "   ✅ host_header=$host_header"
 
-# Rule priority - get from context or use default
-rule_priority=$(echo "$CONTEXT" | jq -r '.scope.alb_rule_priority // empty')
-if [ -z "$rule_priority" ] || [ "$rule_priority" = "null" ]; then
-  rule_priority="${ALB_LISTENER_RULE_PRIORITY_START:-100}"
+# Rule priority - incremental assignment with NRN persistence
+# 1. NRN (re-deployments are idempotent, no race condition)
+# 2. Dynamic query to listener (first deployment; small race window, AWS rejects duplicates)
+rule_priority=""
+
+nrn_priority_output=$(np nrn read --nrn "$SCOPE_NRN" --ids "lambda.alb_rule_priority" --format json 2>/dev/null || echo "{}")
+if [ "$nrn_priority_output" != "{}" ]; then
+  rule_priority=$(echo "$nrn_priority_output" | jq -r '.namespaces.lambda.alb_rule_priority // empty')
 fi
-echo "   ✅ rule_priority=$rule_priority"
+
+if [ -n "$rule_priority" ] && [ "$rule_priority" != "null" ]; then
+  echo "   ✅ rule_priority=$rule_priority (from NRN)"
+else
+  priority_start="${ALB_LISTENER_RULE_PRIORITY_START:-100}"
+  echo "   📡 Querying listener for used priorities (range start: $priority_start)..."
+
+  used_priorities_json=$(aws elbv2 describe-rules \
+    --listener-arn "$alb_listener_arn" \
+    --output json 2>/dev/null | jq '[.Rules[] | select(.Priority != "default") | .Priority | tonumber]')
+
+  rule_priority="$priority_start"
+  while echo "$used_priorities_json" | jq -e --argjson p "$rule_priority" 'contains([$p])' > /dev/null 2>&1; do
+    rule_priority=$((rule_priority + 1))
+  done
+
+  echo "   ✅ rule_priority=$rule_priority (auto-assigned)"
+fi
+
+ALB_RULE_PRIORITY="$rule_priority"
+export ALB_RULE_PRIORITY
 
 # Health check configuration
 health_check_path=$(echo "$CONTEXT" | jq -r '.scope.capabilities.health_check.path // "/health"')

@@ -143,5 +143,11 @@ if [ "$TOFU_ACTION" = "apply" ]; then
       echo "   ✅ api_gateway_endpoint=$API_GATEWAY_ENDPOINT"
       export API_GATEWAY_ENDPOINT
     fi
+
+    ALB_RULE_ARN=$(echo "$outputs" | jq -r '.alb_listener_rule_arn.value // empty')
+    if [ -n "$ALB_RULE_ARN" ]; then
+      echo "   ✅ alb_listener_rule_arn=$ALB_RULE_ARN"
+      export ALB_RULE_ARN
+    fi
   fi
 fi

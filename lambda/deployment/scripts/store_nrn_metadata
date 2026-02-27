@@ -119,6 +119,13 @@ if [ -n "${ALB_RULE_ARN:-}" ]; then
   echo "   ✅ alb_rule_arn=$ALB_RULE_ARN"
 fi
 
+if [ -n "${ALB_RULE_PRIORITY:-}" ]; then
+  metadata=$(echo "$metadata" | jq \
+    --argjson val "$ALB_RULE_PRIORITY" \
+    '. + {alb_rule_priority: $val}')
+  echo "   ✅ alb_rule_priority=$ALB_RULE_PRIORITY"
+fi
+
 if [ -n "${WARMUP_ALIAS_NAME:-}" ]; then
   metadata=$(echo "$metadata" | jq \
     --arg val "$WARMUP_ALIAS_NAME" \

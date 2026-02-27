@@ -97,6 +97,8 @@ steps:
             type: environment
           - name: MODULES_TO_USE
             type: environment
+          - name: ALB_RULE_PRIORITY
+            type: environment
   - name: compose_modules
     type: script
     file: "$SERVICE_PATH/deployment/compose_modules"
@@ -107,6 +109,8 @@ steps:
       - name: LAMBDA_FUNCTION_ARN
         type: environment
       - name: LAMBDA_CURRENT_VERSION
+        type: environment
+      - name: ALB_RULE_ARN
         type: environment
   - name: wait_provisioned_concurrency
     type: script

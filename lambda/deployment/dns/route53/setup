@@ -3,17 +3,17 @@
 echo "🔍 Validating Route53 DNS configuration..."
 
 # Get hosted zone ID from context
-# For private/internal scopes, prefer hosted_private_zone_id if available; fall back to public zone.
+# For private/internal scopes, prefer hosted_zone_id if available; fall back to public zone.
 visibility=$(echo "$CONTEXT" | jq -r '.scope.capabilities.visibility // "public"')
 
 if [ "$visibility" = "private" ] || [ "$visibility" = "internal" ]; then
-  hosted_zone_id=$(echo "$CONTEXT" | jq -r '.providers["cloud-providers"].networking.hosted_private_zone_id // empty')
+  hosted_zone_id=$(echo "$CONTEXT" | jq -r '.providers["cloud-providers"].networking.hosted_zone_id // empty')
   if [ -n "$hosted_zone_id" ] && [ "$hosted_zone_id" != "null" ]; then
     echo "   ✅ Using private hosted zone (visibility=$visibility)"
   else
     # Fall back to public zone if no private zone is configured
     hosted_zone_id=$(echo "$CONTEXT" | jq -r '.providers["cloud-providers"].networking.hosted_public_zone_id // empty')
-    echo "   ⚠️  No hosted_private_zone_id configured, falling back to public zone"
+    echo "   ⚠️  No hosted_zone_id configured, falling back to public zone"
   fi
 else
   hosted_zone_id=$(echo "$CONTEXT" | jq -r '.providers["cloud-providers"].networking.hosted_public_zone_id // empty')
@@ -25,7 +25,7 @@ if [ -z "$hosted_zone_id" ] || [ "$hosted_zone_id" = "null" ]; then
   echo ""
   echo "  🔧 How to fix:"
   echo "    1. Ensure there is an AWS cloud-provider configured at the correct NRN hierarchy level"
-  echo "    2. Set 'hosted_public_zone_id' (public scopes) or 'hosted_private_zone_id' (private/internal scopes)"
+  echo "    2. Set 'hosted_public_zone_id' (public scopes) or 'hosted_zone_id' (private/internal scopes)"
   echo ""
   return 1
 fi

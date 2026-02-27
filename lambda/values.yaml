@@ -56,7 +56,7 @@ configuration:
   # TODO: Remove these 2 values
   # ACM certificate ARN for API Gateway custom domain (required for HTTPS on custom domains)
   CERTIFICATE_ARN: "arn:aws:acm:us-east-1:688720756067:certificate/2dd64edf-e000-46cf-b38c-3bd4fca36522"
-  ALB_LISTENER_ARN: "arn:aws:elasticloadbalancing:us-east-1:688720756067:listener/app/k8s-nullplatform-internal/3aac646a42e5c217/d4b7c007352ee043"
+  ALB_LISTENER_ARN: "arn:aws:elasticloadbalancing:us-east-1:688720756067:listener/app/null-main-balancer/7776a3ca064c0c9d/231f2aff2a15344a"
 
   # ALB Settings (for private visibility)
   # ALB_LISTENER_ARN: ""
