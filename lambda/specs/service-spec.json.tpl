@@ -171,7 +171,7 @@
         "asset_type": {
           "type": "string",
           "export": false,
-          "default": "lambda-package"
+          "default": "docker-image"
         },
         "runtime": {
           "type": "string",
