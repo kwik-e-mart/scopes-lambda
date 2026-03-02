@@ -75,6 +75,7 @@ echo ""
 echo "   📦 Building linux/arm64 → ${IMAGE_URI}-arm64"
 docker buildx build \
   --platform linux/arm64 \
+  --provenance=false \
   --tag "${IMAGE_URI}-arm64" \
   --push \
   "$SCRIPT_DIR"
@@ -82,6 +83,7 @@ docker buildx build \
 echo "   📦 Building linux/amd64 → ${IMAGE_URI}-amd64"
 docker buildx build \
   --platform linux/amd64 \
+  --provenance=false \
   --tag "${IMAGE_URI}-amd64" \
   --push \
   "$SCRIPT_DIR"

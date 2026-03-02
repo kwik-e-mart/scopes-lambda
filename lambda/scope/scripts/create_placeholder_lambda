@@ -37,11 +37,14 @@ architecture="${ARCHITECTURE:-arm64}"
 
 # Lambda does not support multi-arch manifest lists (OCI image index).
 # Images are published per-architecture with a -{arch} suffix on the tag.
-# e.g. :latest → :latest-arm64 or :latest-amd64
+# Lambda uses "x86_64" but images are tagged with the Docker convention "amd64".
+arch_tag="${architecture}"
+[ "$architecture" = "x86_64" ] && arch_tag="amd64"
+
 if [[ "$placeholder_image_base" == *":"* ]]; then
-  placeholder_image_uri="${placeholder_image_base}-${architecture}"
+  placeholder_image_uri="${placeholder_image_base}-${arch_tag}"
 else
-  placeholder_image_uri="${placeholder_image_base}:latest-${architecture}"
+  placeholder_image_uri="${placeholder_image_base}:latest-${arch_tag}"
 fi
 
 log debug "   📋 function_name=$LAMBDA_FUNCTION_NAME"
