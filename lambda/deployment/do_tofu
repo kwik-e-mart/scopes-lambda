@@ -95,6 +95,33 @@ if [ "$TOFU_ACTION" = "apply" ]; then
       log debug "   ✅ CloudWatch log group imported"
     fi
   fi
+
+  # Handle package_type change (Zip → Image or Image → Zip).
+  # AWS does not allow changing package_type in-place; Tofu plans a forced replace.
+  # Because create_before_destroy propagates through the dependency chain, Tofu tries
+  # to create a new function with the same name before destroying the old one → fails.
+  # Detect the mismatch early: remove Lambda resources from state and delete from AWS
+  # so that Tofu can recreate them cleanly with the target package type.
+  if tofu -chdir="$TF_WORKING_DIR" state show aws_lambda_function.main &>/dev/null; then
+    current_pkg=$(tofu -chdir="$TF_WORKING_DIR" state show aws_lambda_function.main 2>/dev/null | \
+      grep -E '^\s+package_type\s' | awk '{print $NF}' | tr -d '"' || echo "")
+    target_pkg=$(echo "$TOFU_VARIABLES" | jq -r '.lambda_package_type // "Zip"')
+
+    if [ -n "$current_pkg" ] && [ "$current_pkg" != "$target_pkg" ]; then
+      echo ""
+      log info "   📡 Package type change detected: $current_pkg → $target_pkg"
+      log info "   📝 Removing Lambda resources from Tofu state for clean recreation..."
+
+      tofu -chdir="$TF_WORKING_DIR" state rm aws_lambda_provisioned_concurrency_config.main 2>/dev/null || true
+      tofu -chdir="$TF_WORKING_DIR" state rm "aws_lambda_alias.warmup[0]" 2>/dev/null || true
+      tofu -chdir="$TF_WORKING_DIR" state rm aws_lambda_alias.main 2>/dev/null || true
+      tofu -chdir="$TF_WORKING_DIR" state rm aws_lambda_function.main 2>/dev/null || true
+
+      log info "   📝 Deleting existing Lambda function from AWS: $LAMBDA_FUNCTION_NAME"
+      aws lambda delete-function --function-name "$LAMBDA_FUNCTION_NAME" 2>/dev/null || true
+      log debug "   ✅ Lambda cleared - Tofu will recreate as $target_pkg"
+    fi
+  fi
 fi
 
 # Run tofu action

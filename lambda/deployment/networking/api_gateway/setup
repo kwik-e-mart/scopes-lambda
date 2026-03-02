@@ -47,14 +47,12 @@ log debug "   ✅ throttling_burst_limit=$throttling_burst_limit"
 log debug "   ✅ throttling_rate_limit=$throttling_rate_limit"
 
 # Check for custom domain configuration
-custom_domain=""
-certificate_arn=""
+# Custom domain: prefer explicit env var; fall back to what route53/setup already
+# computed and stored in TOFU_VARIABLES (dns_full_domain + certificate).
+custom_domain="${API_GATEWAY_CUSTOM_DOMAIN:-$(echo "$TOFU_VARIABLES" | jq -r '.api_gateway_custom_domain // empty')}"
+certificate_arn="${API_GATEWAY_CERTIFICATE_ARN:-$(echo "$TOFU_VARIABLES" | jq -r '.api_gateway_certificate_arn // empty')}"
 
-# If DNS layer will generate the domain, we'll get it from locals
-# For now, check if there's a pre-configured custom domain
-if [ -n "${API_GATEWAY_CUSTOM_DOMAIN:-}" ]; then
-  custom_domain="$API_GATEWAY_CUSTOM_DOMAIN"
-  certificate_arn="${API_GATEWAY_CERTIFICATE_ARN:-}"
+if [ -n "$custom_domain" ]; then
   log debug "   ✅ custom_domain=$custom_domain"
 fi
 

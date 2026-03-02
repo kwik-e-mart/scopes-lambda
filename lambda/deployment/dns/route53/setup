@@ -106,13 +106,6 @@ log debug "   ✅ subdomain=$network_subdomain"
 scope_domain="${network_subdomain}.${network_domain}"
 log debug "   ✅ full_domain=$scope_domain"
 
-# Determine the DNS target based on visibility
-visibility=$(echo "$CONTEXT" | jq -r '.scope.capabilities.visibility // "public"')
-
-# These will be set by the networking layer via terraform locals
-# For API Gateway: api_gateway_target_domain, api_gateway_target_zone_id
-# For ALB: the ALB domain from the listener
-
 TOFU_VARIABLES=$(echo "$TOFU_VARIABLES" | jq \
   --arg hosted_zone_id "$hosted_zone_id" \
   --arg domain "$network_domain" \
@@ -125,9 +118,10 @@ TOFU_VARIABLES=$(echo "$TOFU_VARIABLES" | jq \
     dns_full_domain: $full_domain
   }')
 
-# Configure API Gateway custom domain if API Gateway is being used
-api_gateway_name=$(echo "$TOFU_VARIABLES" | jq -r '.api_gateway_name // empty')
-if [ -n "$api_gateway_name" ]; then
+# For public scopes, configure Route53 for API Gateway.
+# api_gateway/setup runs AFTER this script so api_gateway_name is not in
+# TOFU_VARIABLES yet — use visibility (already resolved above) instead.
+if [ "$visibility" = "public" ]; then
   cert_arn="${CERTIFICATE_ARN:-}"
 
   if [ -n "$cert_arn" ]; then

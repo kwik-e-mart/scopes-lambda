@@ -37,6 +37,32 @@ resource "aws_iam_role_policy" "custom" {
   policy = var.iam_role_policies[count.index].policy
 }
 
+# ECR pull permissions for container image deployments
+resource "aws_iam_role_policy" "ecr" {
+  count = var.iam_create_role && var.iam_package_type == "Image" ? 1 : 0
+
+  name = "ecr-image-pull"
+  role = aws_iam_role.lambda[0].id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ecr:BatchGetImage",
+          "ecr:GetDownloadUrlForLayer"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["ecr:GetAuthorizationToken"]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
 # Secrets Manager read access (for parameters strategy = secretsmanager)
 resource "aws_iam_role_policy" "secrets_manager" {
   count = var.iam_create_role && var.iam_secrets_manager_secret_arn != "" ? 1 : 0

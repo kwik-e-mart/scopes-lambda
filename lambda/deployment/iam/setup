@@ -148,17 +148,22 @@ else
   # Determine if VPC access is needed
   vpc_enabled=$(echo "$CONTEXT" | jq -r '.scope.capabilities.vpc_enabled // false')
 
+  # Package type (Zip or Image) — needed to conditionally add ECR pull permissions
+  package_type="${PACKAGE_TYPE:-Zip}"
+
   TOFU_VARIABLES=$(echo "$TOFU_VARIABLES" | jq \
     --arg role_name "$iam_role_name" \
     --argjson policies "$policies_json" \
     --argjson vpc_enabled "$vpc_enabled" \
     --arg role_entity "$role_entity" \
+    --arg package_type "$package_type" \
     '. + {
       iam_role_name: $role_name,
       iam_create_role: true,
       iam_role_policies: $policies,
       iam_vpc_enabled: $vpc_enabled,
-      iam_role_entity: $role_entity
+      iam_role_entity: $role_entity,
+      iam_package_type: $package_type
     }')
 fi
 
