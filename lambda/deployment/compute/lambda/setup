@@ -8,47 +8,48 @@ log info "🔍 Validating Lambda compute configuration..."
 lambda_function_name=$(echo "$CONTEXT" | jq -r '.lambda.function_name // empty')
 lambda_role_arn=$(echo "$CONTEXT" | jq -r '.lambda.role_arn // empty')
 
-# Get asset information
-asset_url=$(echo "$CONTEXT" | jq -r '.asset.url // empty')
+# PACKAGE_TYPE, IMAGE_URI, S3_BUCKET, and S3_KEY are parsed by build_context and exported.
+# Use them directly to avoid re-parsing the asset URL.
+package_type="${PACKAGE_TYPE:-Zip}"
+lambda_image_uri="${IMAGE_URI:-}"
+lambda_s3_bucket="${S3_BUCKET:-}"
+lambda_s3_key="${S3_KEY:-}"
 
-if [ -z "$asset_url" ] || [ "$asset_url" = "null" ]; then
-  echo ""
-  echo "   ❌ Asset URL not found in context" >&2
-  echo "" >&2
-  echo "  💡 Possible causes:" >&2
-  echo "    • The deployment does not have an associated asset" >&2
-  echo "    • The asset was not built or uploaded correctly" >&2
-  echo "" >&2
-  echo "  🔧 How to fix:" >&2
-  echo "    • Ensure the application has a valid build that produces a Lambda deployment package" >&2
-  echo "" >&2
-  return 1
-fi
-
-log debug "   ✅ asset_url=$asset_url"
-
-# Parse S3 URL to extract bucket and key
-# Supports both s3:// and https:// formats
-if [[ "$asset_url" == s3://* ]]; then
-  # s3://bucket-name/path/to/file.zip
-  lambda_s3_bucket=$(echo "$asset_url" | sed 's|s3://||' | cut -d'/' -f1)
-  lambda_s3_key=$(echo "$asset_url" | sed 's|s3://[^/]*/||')
-elif [[ "$asset_url" == https://*.s3.*.amazonaws.com/* ]]; then
-  # https://bucket-name.s3.region.amazonaws.com/path/to/file.zip
-  lambda_s3_bucket=$(echo "$asset_url" | sed 's|https://||' | cut -d'.' -f1)
-  lambda_s3_key=$(echo "$asset_url" | sed 's|https://[^/]*/||')
+if [ "$package_type" = "Image" ]; then
+  if [ -z "$lambda_image_uri" ] || [ "$lambda_image_uri" = "null" ]; then
+    echo ""
+    echo "   ❌ Image URI not found (ASSET_TYPE=docker-image but IMAGE_URI is empty)" >&2
+    echo "" >&2
+    echo "  💡 Possible causes:" >&2
+    echo "    • The build did not produce a container image URL" >&2
+    echo "    • The asset object is missing the url field" >&2
+    echo "" >&2
+    echo "  🔧 How to fix:" >&2
+    echo "    • Verify the build pipeline pushes the image to ECR and sets asset.url" >&2
+    echo "    • Expected format: {account}.dkr.ecr.{region}.amazonaws.com/{repo}:{tag}" >&2
+    echo "" >&2
+    return 1
+  fi
+  log debug "   ✅ package_type=Image"
+  log debug "   ✅ image_uri=$lambda_image_uri"
 else
-  echo ""
-  echo "   ❌ Unsupported asset URL format: $asset_url" >&2
-  echo "" >&2
-  echo "  🔧 How to fix:" >&2
-  echo "    • Asset URL must be in S3 format (s3://bucket/key or https://bucket.s3.region.amazonaws.com/key)" >&2
-  echo "" >&2
-  return 1
+  if [ -z "$lambda_s3_bucket" ] || [ -z "$lambda_s3_key" ]; then
+    echo ""
+    echo "   ❌ Asset not found (S3_BUCKET or S3_KEY is empty)" >&2
+    echo "" >&2
+    echo "  💡 Possible causes:" >&2
+    echo "    • The deployment does not have an associated asset" >&2
+    echo "    • The asset was not built or uploaded correctly" >&2
+    echo "" >&2
+    echo "  🔧 How to fix:" >&2
+    echo "    • Ensure the application has a valid build that produces a Lambda deployment package" >&2
+    echo "" >&2
+    return 1
+  fi
+  log debug "   ✅ package_type=Zip"
+  log debug "   ✅ s3_bucket=$lambda_s3_bucket"
+  log debug "   ✅ s3_key=$lambda_s3_key"
 fi
-
-log debug "   ✅ s3_bucket=$lambda_s3_bucket"
-log debug "   ✅ s3_key=$lambda_s3_key"
 
 # Extract capabilities from scope
 runtime=$(echo "$CONTEXT" | jq -r '.scope.capabilities.runtime // "nodejs20.x"')
@@ -162,6 +163,8 @@ TOFU_VARIABLES=$(echo "$TOFU_VARIABLES" | jq \
   --argjson timeout "$timeout" \
   --argjson ephemeral_storage "$ephemeral_storage" \
   --arg architecture "$architecture" \
+  --arg package_type "$package_type" \
+  --arg image_uri "$lambda_image_uri" \
   --arg s3_bucket "$lambda_s3_bucket" \
   --arg s3_key "$lambda_s3_key" \
   --argjson environment_variables "$env_vars" \
@@ -182,6 +185,8 @@ TOFU_VARIABLES=$(echo "$TOFU_VARIABLES" | jq \
     lambda_timeout: $timeout,
     lambda_ephemeral_storage: $ephemeral_storage,
     lambda_architecture: $architecture,
+    lambda_package_type: $package_type,
+    lambda_image_uri: $image_uri,
     lambda_s3_bucket: $s3_bucket,
     lambda_s3_key: $s3_key,
     lambda_environment_variables: $environment_variables,

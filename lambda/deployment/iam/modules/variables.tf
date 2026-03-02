@@ -48,3 +48,9 @@ variable "lambda_role_arn" {
   type        = string
   default     = ""
 }
+
+variable "iam_package_type" {
+  description = "Lambda deployment package type (Zip or Image) - used to add ECR pull permissions for image deployments"
+  type        = string
+  default     = "Zip"
+}
