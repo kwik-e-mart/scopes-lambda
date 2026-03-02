@@ -32,8 +32,17 @@ if [ -z "${OUTPUT_DIR:-}" ]; then
   return 1
 fi
 
-placeholder_image_uri="${PLACEHOLDER_IMAGE_URI:-public.ecr.aws/nullplatform/aws-lambda/nullplatform-lambda-placeholder:latest}"
+placeholder_image_base="${PLACEHOLDER_IMAGE_URI:-public.ecr.aws/nullplatform/aws-lambda/nullplatform-lambda-placeholder:latest}"
 architecture="${ARCHITECTURE:-arm64}"
+
+# Lambda does not support multi-arch manifest lists (OCI image index).
+# Images are published per-architecture with a -{arch} suffix on the tag.
+# e.g. :latest → :latest-arm64 or :latest-amd64
+if [[ "$placeholder_image_base" == *":"* ]]; then
+  placeholder_image_uri="${placeholder_image_base}-${architecture}"
+else
+  placeholder_image_uri="${placeholder_image_base}:latest-${architecture}"
+fi
 
 log debug "   📋 function_name=$LAMBDA_FUNCTION_NAME"
 log debug "   📋 role_arn=$LAMBDA_ROLE_ARN"
@@ -58,52 +67,65 @@ if ! echo "$existing_function" | grep -q "ResourceNotFoundException\|NOT_FOUND";
   return 0
 fi
 
-# Validate placeholder image is reachable in public ECR
-# Parses the URI to extract path (alias/repo) and tag, then checks the manifest
-# via the public ECR OCI registry API - no Docker or AWS credentials required.
+# Validate placeholder image exists
 echo ""
-log info "   📡 Validating placeholder image in public ECR..."
+log info "   📡 Validating placeholder image..."
 
-image_ref="${placeholder_image_uri#public.ecr.aws/}"   # strip host
+image_found=false
 
-if [[ "$image_ref" == *":"* ]]; then
+if [[ "$placeholder_image_uri" == public.ecr.aws/* ]]; then
+  # Public ECR: validate via OCI token + manifest API (no AWS credentials needed)
+  image_ref="${placeholder_image_uri#public.ecr.aws/}"
   image_tag="${image_ref##*:}"
   image_path="${image_ref%:*}"
+  [[ "$image_ref" != *":"* ]] && { image_tag="latest"; image_path="$image_ref"; }
+
+  token_response=$(curl -sfL \
+    "https://public.ecr.aws/token/?scope=repository:${image_path}:pull&service=public.ecr.aws" \
+    2>/dev/null || echo "")
+
+  token=""
+  [ -n "$token_response" ] && token=$(echo "$token_response" | jq -r '.token // empty' 2>/dev/null || echo "")
+
+  if [ -z "$token" ]; then
+    echo "" >&2
+    echo "❌ Cannot reach public ECR to validate placeholder image" >&2
+    echo "" >&2
+    echo "💡 Possible causes:" >&2
+    echo "   • The agent has no outbound internet access" >&2
+    echo "   • public.ecr.aws is temporarily unavailable" >&2
+    echo "" >&2
+    echo "🔧 How to fix:" >&2
+    echo "   • Verify outbound connectivity: curl -s https://public.ecr.aws" >&2
+    return 1
+  fi
+
+  http_code=$(curl -s -o /dev/null -w "%{http_code}" \
+    -H "Authorization: Bearer $token" \
+    -H "Accept: application/vnd.docker.distribution.manifest.v2+json" \
+    "https://public.ecr.aws/v2/${image_path}/manifests/${image_tag}")
+
+  [ "$http_code" = "200" ] && image_found=true
 else
-  image_tag="latest"
-  image_path="$image_ref"
+  # Private ECR: validate via aws ecr describe-images (uses existing AWS credentials)
+  ecr_registry="${placeholder_image_uri%%/*}"
+  ecr_region=$(echo "$ecr_registry" | cut -d. -f4)
+  ecr_rest="${placeholder_image_uri#*/}"
+  ecr_repo="${ecr_rest%:*}"
+  ecr_tag="${ecr_rest##*:}"
+  [[ "$ecr_rest" != *":"* ]] && ecr_tag="latest"
+
+  if aws ecr describe-images \
+      --repository-name "$ecr_repo" \
+      --image-ids "imageTag=$ecr_tag" \
+      --region "$ecr_region" &>/dev/null 2>&1; then
+    image_found=true
+  fi
 fi
 
-token_response=$(curl -sfL \
-  "https://public.ecr.aws/token/?scope=repository:${image_path}:pull&service=public.ecr.aws" \
-  2>/dev/null || echo "")
-
-token=""
-if [ -n "$token_response" ]; then
-  token=$(echo "$token_response" | jq -r '.token // empty' 2>/dev/null || echo "")
-fi
-
-if [ -z "$token" ]; then
+if [ "$image_found" = "false" ]; then
   echo "" >&2
-  echo "❌ Cannot reach public ECR to validate placeholder image" >&2
-  echo "" >&2
-  echo "💡 Possible causes:" >&2
-  echo "   • The agent has no outbound internet access" >&2
-  echo "   • public.ecr.aws is temporarily unavailable" >&2
-  echo "" >&2
-  echo "🔧 How to fix:" >&2
-  echo "   • Verify outbound connectivity: curl -s https://public.ecr.aws" >&2
-  return 1
-fi
-
-http_code=$(curl -s -o /dev/null -w "%{http_code}" \
-  -H "Authorization: Bearer $token" \
-  -H "Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.v2+json" \
-  "https://public.ecr.aws/v2/${image_path}/manifests/${image_tag}")
-
-if [ "$http_code" != "200" ]; then
-  echo "" >&2
-  echo "❌ Placeholder image not found: $placeholder_image_uri (HTTP $http_code)" >&2
+  echo "❌ Placeholder image not found: $placeholder_image_uri" >&2
   echo "" >&2
   echo "💡 Possible causes:" >&2
   echo "   • The image has not been published yet" >&2
