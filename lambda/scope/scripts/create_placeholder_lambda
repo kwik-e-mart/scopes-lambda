@@ -74,9 +74,14 @@ else
   image_path="$image_ref"
 fi
 
-token=$(curl -sf \
+token_response=$(curl -sf \
   "https://public.ecr.aws/token?scope=repository:${image_path}:pull&service=public.ecr.aws" \
-  2>/dev/null | jq -r '.token // empty')
+  2>/dev/null || echo "")
+
+token=""
+if [ -n "$token_response" ]; then
+  token=$(echo "$token_response" | jq -r '.token // empty' 2>/dev/null || echo "")
+fi
 
 if [ -z "$token" ]; then
   echo "" >&2
@@ -169,15 +174,29 @@ if ! echo "$create_output" | grep -q "FunctionArn"; then
   echo "" >&2
   echo "❌ Failed to create Lambda function '$LAMBDA_FUNCTION_NAME'" >&2
   echo "" >&2
-  echo "💡 Possible causes:" >&2
-  echo "   • IAM role not yet propagated (even after retries)" >&2
-  echo "   • Insufficient permissions to create Lambda functions" >&2
-  echo "   • Invalid architecture '$architecture'" >&2
+
+  if echo "$create_output" | grep -qi "ImageNotFoundException\|invalid.*image\|repository does not exist"; then
+    echo "  🖼️  Error: Placeholder image not found or not accessible" >&2
+    echo "" >&2
+    echo "  💡 Possible causes:" >&2
+    echo "    • The placeholder image has not been published yet" >&2
+    echo "    • PLACEHOLDER_IMAGE_URI=$placeholder_image_uri is incorrect" >&2
+    echo "" >&2
+    echo "  🔧 How to fix:" >&2
+    echo "    • Publish the image once by running: lambda/scope/placeholder/publish" >&2
+  else
+    echo "  💡 Possible causes:" >&2
+    echo "    • IAM role not yet propagated (even after retries)" >&2
+    echo "    • Insufficient permissions to create Lambda functions" >&2
+    echo "    • Invalid architecture '$architecture'" >&2
+    echo "" >&2
+    echo "  🔧 How to fix:" >&2
+    echo "    • Verify the agent has lambda:CreateFunction permission" >&2
+    echo "    • Check that role_arn=$LAMBDA_ROLE_ARN exists and is assumable by Lambda" >&2
+    echo "    • AWS error: $create_output" >&2
+  fi
+
   echo "" >&2
-  echo "🔧 How to fix:" >&2
-  echo "   • Verify the agent has lambda:CreateFunction permission" >&2
-  echo "   • Check that role_arn=$LAMBDA_ROLE_ARN exists and is assumable by Lambda" >&2
-  echo "   • AWS error: $create_output" >&2
   return 1
 fi
 
