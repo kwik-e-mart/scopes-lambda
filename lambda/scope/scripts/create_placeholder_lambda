@@ -74,8 +74,8 @@ else
   image_path="$image_ref"
 fi
 
-token_response=$(curl -sf \
-  "https://public.ecr.aws/token?scope=repository:${image_path}:pull&service=public.ecr.aws" \
+token_response=$(curl -sfL \
+  "https://public.ecr.aws/token/?scope=repository:${image_path}:pull&service=public.ecr.aws" \
   2>/dev/null || echo "")
 
 token=""
