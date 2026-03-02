@@ -78,6 +78,5 @@ configuration:
   # Parameters Strategy: "env" (Lambda env vars) or "secretsmanager" (AWS Secrets Manager)
   PARAMETERS_STRATEGY: "env"
 
-  # Placeholder Lambda (created during scope creation)
-  PLACEHOLDER_LAMBDA_RUNTIME: "nodejs20.x"
-  PLACEHOLDER_LAMBDA_HANDLER: "index.handler"
+  # Placeholder Lambda container image (created once via lambda/scope/placeholder/publish)
+  PLACEHOLDER_IMAGE_URI: "public.ecr.aws/nullplatform/aws-lambda/nullplatform-lambda-placeholder:latest"

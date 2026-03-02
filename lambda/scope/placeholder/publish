@@ -1,0 +1,61 @@
+#!/bin/bash
+# Publish the nullplatform Lambda placeholder image to public ECR.
+#
+# This script is meant to be run ONCE (or on each new version of the placeholder)
+# from a machine with Docker Buildx and AWS credentials that have public ECR push
+# permissions (ecr-public:InitiateLayerUpload, ecr-public:UploadLayerPart,
+# ecr-public:CompleteLayerUpload, ecr-public:PutImage).
+#
+# Usage:
+#   cd lambda/scope/placeholder
+#   ./publish [--tag <tag>]
+#
+# The default tag is "latest". Public ECR operations require us-east-1.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+IMAGE_REPO="public.ecr.aws/nullplatform/aws-lambda/nullplatform-lambda-placeholder"
+IMAGE_TAG="${1:-latest}"
+IMAGE_URI="${IMAGE_REPO}:${IMAGE_TAG}"
+
+echo "📦 Publishing placeholder image"
+echo "   repo: $IMAGE_REPO"
+echo "   tag:  $IMAGE_TAG"
+echo ""
+
+# Check dependencies
+for cmd in docker aws; do
+  if ! command -v "$cmd" &>/dev/null; then
+    echo "❌ '$cmd' is required but not found in PATH" >&2
+    exit 1
+  fi
+done
+
+if ! docker buildx version &>/dev/null; then
+  echo "❌ Docker Buildx is required for multi-architecture builds" >&2
+  echo "   Install: https://docs.docker.com/buildx/working-with-buildx/" >&2
+  exit 1
+fi
+
+# Authenticate to public ECR (must use us-east-1)
+echo "🔑 Authenticating to public ECR..."
+aws --profile null_runtime_main ecr-public get-login-password --region us-east-1 | \
+  docker login --username AWS --password-stdin public.ecr.aws
+echo "   ✅ Authenticated"
+echo ""
+
+# Build and push multi-arch image (arm64 + amd64) in a single manifest
+echo "🔨 Building and pushing multi-arch image (linux/amd64, linux/arm64)..."
+echo "   This may take a few minutes on first run..."
+echo ""
+
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  --tag "$IMAGE_URI" \
+  --push \
+  "$SCRIPT_DIR"
+
+echo ""
+echo "✅ Image published: $IMAGE_URI"
