@@ -118,31 +118,6 @@ TOFU_VARIABLES=$(echo "$TOFU_VARIABLES" | jq \
     dns_full_domain: $full_domain
   }')
 
-# For public scopes, configure Route53 for API Gateway.
-# api_gateway/setup runs AFTER this script so api_gateway_name is not in
-# TOFU_VARIABLES yet — use visibility (already resolved above) instead.
-if [ "$visibility" = "public" ]; then
-  cert_arn="${CERTIFICATE_ARN:-}"
-
-  if [ -n "$cert_arn" ]; then
-    log debug "   ✅ certificate_arn=$cert_arn"
-    log info "   📝 Configuring API Gateway custom domain: $scope_domain"
-
-    TOFU_VARIABLES=$(echo "$TOFU_VARIABLES" | jq \
-      --arg domain "$scope_domain" \
-      --arg cert "$cert_arn" \
-      '. + {
-        api_gateway_custom_domain: $domain,
-        api_gateway_certificate_arn: $cert,
-        dns_use_api_gateway: true,
-        dns_use_api_gateway_cname: false
-      }')
-  else
-    log warn "   ⚠️  CERTIFICATE_ARN not set - using CNAME to execute-api endpoint (no custom SSL)"
-    TOFU_VARIABLES=$(echo "$TOFU_VARIABLES" | jq '. + {dns_use_api_gateway_cname: true}')
-  fi
-fi
-
 echo ""
 log info "   📝 Setting scope domain to '$scope_domain'..."
 

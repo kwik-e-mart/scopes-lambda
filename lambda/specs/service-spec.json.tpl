@@ -222,11 +222,11 @@
         "visibility": {
           "type": "string",
           "title": "Visibility",
-          "description": "How your function is accessed (public via API Gateway, private via internal ALB)",
+          "description": "How your function is accessed (public, private)",
           "default": "public",
           "oneOf": [
-            { "const": "public", "title": "Public (API Gateway)" },
-            { "const": "private", "title": "Private (ALB)" }
+            { "const": "public", "title": "Public" },
+            { "const": "private", "title": "Private" }
           ]
         },
         "reserved_concurrency": {
