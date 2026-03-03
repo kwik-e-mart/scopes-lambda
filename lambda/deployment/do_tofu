@@ -96,32 +96,6 @@ if [ "$TOFU_ACTION" = "apply" ]; then
     fi
   fi
 
-  # Handle package_type change (Zip → Image or Image → Zip).
-  # AWS does not allow changing package_type in-place; Tofu plans a forced replace.
-  # Because create_before_destroy propagates through the dependency chain, Tofu tries
-  # to create a new function with the same name before destroying the old one → fails.
-  # Detect the mismatch early: remove Lambda resources from state and delete from AWS
-  # so that Tofu can recreate them cleanly with the target package type.
-  if tofu -chdir="$TF_WORKING_DIR" state show aws_lambda_function.main &>/dev/null; then
-    current_pkg=$(tofu -chdir="$TF_WORKING_DIR" state show aws_lambda_function.main 2>/dev/null | \
-      grep -E '^\s+package_type\s' | awk '{print $NF}' | tr -d '"' || echo "")
-    target_pkg=$(echo "$TOFU_VARIABLES" | jq -r '.lambda_package_type // "Zip"')
-
-    if [ -n "$current_pkg" ] && [ "$current_pkg" != "$target_pkg" ]; then
-      echo ""
-      log info "   📡 Package type change detected: $current_pkg → $target_pkg"
-      log info "   📝 Removing Lambda resources from Tofu state for clean recreation..."
-
-      tofu -chdir="$TF_WORKING_DIR" state rm aws_lambda_provisioned_concurrency_config.main 2>/dev/null || true
-      tofu -chdir="$TF_WORKING_DIR" state rm "aws_lambda_alias.warmup[0]" 2>/dev/null || true
-      tofu -chdir="$TF_WORKING_DIR" state rm aws_lambda_alias.main 2>/dev/null || true
-      tofu -chdir="$TF_WORKING_DIR" state rm aws_lambda_function.main 2>/dev/null || true
-
-      log info "   📝 Deleting existing Lambda function from AWS: $LAMBDA_FUNCTION_NAME"
-      aws lambda delete-function --function-name "$LAMBDA_FUNCTION_NAME" 2>/dev/null || true
-      log debug "   ✅ Lambda cleared - Tofu will recreate as $target_pkg"
-    fi
-  fi
 fi
 
 # Run tofu action
@@ -179,26 +153,28 @@ if [ "$TOFU_ACTION" = "apply" ]; then
     fi
   fi
 
-  # If the alias was created by scope provisioning pointing to $LATEST (placeholder),
-  # Tofu imports it but ignores function_version due to lifecycle.ignore_changes.
-  # Explicitly update the alias to the published version so blue-green traffic
-  # switching works correctly on the first deployment.
-  if [ -n "$LAMBDA_CURRENT_VERSION" ] && [ "$LAMBDA_CURRENT_VERSION" != "" ]; then
+  # Tofu manages the alias with lifecycle.ignore_changes on function_version, so it
+  # never updates the alias version directly. We do it explicitly here for non-blue-green
+  # deployments whenever the alias lags behind the newly published version — this covers:
+  #   • First deploy after scope create (alias at placeholder version, e.g. "1")
+  #   • First deploy on a fresh scope where alias still points to $LATEST
+  if [ -n "$LAMBDA_CURRENT_VERSION" ] && [ "$LAMBDA_CURRENT_VERSION" != "" ] && \
+     [ "${IS_BLUE_GREEN:-false}" != "true" ]; then
     current_alias_version=$(aws lambda get-alias \
       --function-name "$LAMBDA_FUNCTION_NAME" \
       --name "$main_alias_name" \
       --query 'FunctionVersion' \
       --output text 2>/dev/null || echo "")
 
-    if [ "$current_alias_version" = '$LATEST' ]; then
+    if [ -n "$current_alias_version" ] && [ "$current_alias_version" != "$LAMBDA_CURRENT_VERSION" ]; then
       echo ""
-      log info "   📡 Alias points to \$LATEST - updating to published version $LAMBDA_CURRENT_VERSION..."
+      log info "   📡 Alias points to $current_alias_version - updating to published version $LAMBDA_CURRENT_VERSION..."
       aws lambda update-alias \
         --function-name "$LAMBDA_FUNCTION_NAME" \
         --name "$main_alias_name" \
         --function-version "$LAMBDA_CURRENT_VERSION" \
         --routing-config '{}' >/dev/null 2>&1 || true
-      log debug "   ✅ Alias updated from \$LATEST to version $LAMBDA_CURRENT_VERSION"
+      log debug "   ✅ Alias updated from $current_alias_version to version $LAMBDA_CURRENT_VERSION"
     fi
   fi
 fi

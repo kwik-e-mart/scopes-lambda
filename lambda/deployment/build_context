@@ -22,12 +22,7 @@ if [ -z "$SCOPE_ID" ] || [ "$SCOPE_ID" = "null" ]; then
 fi
 
 if [ -z "$DEPLOYMENT_ID" ] || [ "$DEPLOYMENT_ID" = "null" ]; then
-  echo "❌ Failed to extract deployment ID from context" >&2
-  echo "💡 Possible causes:" >&2
-  echo "   - CONTEXT variable is missing the deployment object" >&2
-  echo "🔧 How to fix:" >&2
-  echo "   - Verify the CONTEXT environment variable contains valid JSON with .deployment.id" >&2
-  return 1
+  DEPLOYMENT_ID=""
 fi
 
 log debug "   ✅ scope_id=$SCOPE_ID"
@@ -59,6 +54,10 @@ log info "📋 Scope: $SCOPE_ID | Deployment: $DEPLOYMENT_ID | Strategy: $DEPLOY
 # Read existing Lambda metadata from NRN (if exists)
 echo ""
 log info "   📡 Reading Lambda metadata from NRN..."
+
+# Preserve values that may already be set by upstream steps (e.g. scope create)
+_env_function_arn="${LAMBDA_FUNCTION_ARN:-}"
+_env_role_arn="${LAMBDA_ROLE_ARN:-}"
 
 LAMBDA_FUNCTION_ARN=""
 LAMBDA_ROLE_ARN=""
@@ -93,6 +92,11 @@ else
   LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_TYPE=""
   LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_VALUE=""
 fi
+
+# Fall back to env-provided values if NRN did not have them
+# (e.g. during scope create, NRN has no lambda.* keys yet)
+[ -z "$LAMBDA_FUNCTION_ARN" ] && LAMBDA_FUNCTION_ARN="$_env_function_arn"
+[ -z "$LAMBDA_ROLE_ARN" ]    && LAMBDA_ROLE_ARN="$_env_role_arn"
 
 # Look up Lambda versions by deployment ID (each published version embeds the deployment ID as description)
 log info "   📡 Looking up Lambda versions by deployment ID..."
@@ -260,56 +264,66 @@ log debug "   ✅ security_group_ids=$SECURITY_GROUP_IDS"
 echo ""
 log info "   📦 Extracting asset information..."
 
-ASSET_URL=$(echo "$CONTEXT" | jq -r '.asset.url // ""')
-ASSET_TYPE=$(echo "$CONTEXT" | jq -r '.asset.type // "lambda-asset"')
-PACKAGE_TYPE="Zip"
-IMAGE_URI=""
-S3_BUCKET=""
-S3_KEY=""
-
-log debug "   ✅ asset_type=$ASSET_TYPE"
-
-if [ "$ASSET_TYPE" = "docker-image" ]; then
-  # Container image deployment (ECR)
+if [ -n "${IMAGE_URI:-}" ]; then
+  # IMAGE_URI already set by caller (e.g. scope create with placeholder image) — skip asset resolution
   PACKAGE_TYPE="Image"
-
-  if [ -n "$ASSET_URL" ] && [ "$ASSET_URL" != "null" ]; then
-    IMAGE_URI="$ASSET_URL"
-    log debug "   ✅ package_type=$PACKAGE_TYPE"
-    log debug "   ✅ image_uri=$IMAGE_URI"
-  else
-    echo "❌ Asset URL is required for docker-image asset type" >&2
-    echo "💡 Possible causes:" >&2
-    echo "   - The build did not produce a container image URL" >&2
-    echo "   - The asset object is missing the url field" >&2
-    echo "🔧 How to fix:" >&2
-    echo "   - Verify the build pipeline pushes the image to ECR and sets asset.url" >&2
-    echo "   - Expected format: {account}.dkr.ecr.{region}.amazonaws.com/{repo}:{tag}" >&2
-    return 1
-  fi
+  ASSET_TYPE="docker-image"
+  ASSET_URL="$IMAGE_URI"
+  S3_BUCKET=""
+  S3_KEY=""
+  log debug "   ✅ image_uri=$IMAGE_URI (provided by caller)"
 else
-  # Zip deployment (S3)
+  ASSET_URL=$(echo "$CONTEXT" | jq -r '.asset.url // ""')
+  ASSET_TYPE=$(echo "$CONTEXT" | jq -r '.asset.type // "lambda-asset"')
   PACKAGE_TYPE="Zip"
+  IMAGE_URI=""
+  S3_BUCKET=""
+  S3_KEY=""
 
-  if [ -n "$ASSET_URL" ] && [ "$ASSET_URL" != "null" ]; then
-    # Parse s3://bucket/key format
-    if [[ "$ASSET_URL" =~ ^s3://([^/]+)/(.+)$ ]]; then
-      S3_BUCKET="${BASH_REMATCH[1]}"
-      S3_KEY="${BASH_REMATCH[2]}"
+  log debug "   ✅ asset_type=$ASSET_TYPE"
+
+  if [ "$ASSET_TYPE" = "docker-image" ]; then
+    # Container image deployment (ECR)
+    PACKAGE_TYPE="Image"
+
+    if [ -n "$ASSET_URL" ] && [ "$ASSET_URL" != "null" ]; then
+      IMAGE_URI="$ASSET_URL"
       log debug "   ✅ package_type=$PACKAGE_TYPE"
-      log debug "   ✅ s3_bucket=$S3_BUCKET"
-      log debug "   ✅ s3_key=$S3_KEY"
+      log debug "   ✅ image_uri=$IMAGE_URI"
     else
-      echo "❌ Invalid asset URL format: $ASSET_URL" >&2
+      echo "❌ Asset URL is required for docker-image asset type" >&2
       echo "💡 Possible causes:" >&2
-      echo "   - Asset URL does not match expected s3://bucket/key format" >&2
+      echo "   - The build did not produce a container image URL" >&2
+      echo "   - The asset object is missing the url field" >&2
       echo "🔧 How to fix:" >&2
-      echo "   - Verify the asset was uploaded correctly to S3" >&2
-      echo "   - Expected format: s3://bucket-name/path/to/asset.zip" >&2
+      echo "   - Verify the build pipeline pushes the image to ECR and sets asset.url" >&2
+      echo "   - Expected format: {account}.dkr.ecr.{region}.amazonaws.com/{repo}:{tag}" >&2
       return 1
     fi
   else
-    log debug "   ✅ asset_url=not provided (may be set later)"
+    # Zip deployment (S3)
+    PACKAGE_TYPE="Zip"
+
+    if [ -n "$ASSET_URL" ] && [ "$ASSET_URL" != "null" ]; then
+      # Parse s3://bucket/key format
+      if [[ "$ASSET_URL" =~ ^s3://([^/]+)/(.+)$ ]]; then
+        S3_BUCKET="${BASH_REMATCH[1]}"
+        S3_KEY="${BASH_REMATCH[2]}"
+        log debug "   ✅ package_type=$PACKAGE_TYPE"
+        log debug "   ✅ s3_bucket=$S3_BUCKET"
+        log debug "   ✅ s3_key=$S3_KEY"
+      else
+        echo "❌ Invalid asset URL format: $ASSET_URL" >&2
+        echo "💡 Possible causes:" >&2
+        echo "   - Asset URL does not match expected s3://bucket/key format" >&2
+        echo "🔧 How to fix:" >&2
+        echo "   - Verify the asset was uploaded correctly to S3" >&2
+        echo "   - Expected format: s3://bucket-name/path/to/asset.zip" >&2
+        return 1
+      fi
+    else
+      log debug "   ✅ asset_url=not provided (may be set later)"
+    fi
   fi
 fi
 
@@ -427,7 +441,7 @@ MODULES_TO_USE=""
 TOFU_INIT_VARIABLES="$TOFU_INIT_VARIABLES -backend-config=key=$STATE_KEY"
 
 # Resource tags
-RESOURCE_TAGS_JSON=$(jq -n \
+RESOURCE_TAGS_JSON=$(jq -cn \
   --arg scope_id "$SCOPE_ID" \
   --arg deployment_id "$DEPLOYMENT_ID" \
   --arg namespace "$NAMESPACE_SLUG" \

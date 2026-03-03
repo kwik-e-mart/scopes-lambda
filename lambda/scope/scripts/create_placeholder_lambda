@@ -1,18 +1,18 @@
 #!/bin/bash
-# Create a placeholder Lambda function during scope creation
-# This ensures the IAM role is available before first deployment
+# Create the placeholder Lambda function using a pre-built public container image.
+# The image is published once via lambda/scope/placeholder/publish and configured
+# via PLACEHOLDER_IMAGE_URI in values.yaml.
 
-echo "🔍 Creating placeholder Lambda function..."
+source "$SERVICE_PATH/utils/log"
 
-# Required environment variables
+log info "🔍 Creating placeholder Lambda function (container image)..."
+
 if [ -z "${LAMBDA_FUNCTION_NAME:-}" ]; then
   echo "❌ LAMBDA_FUNCTION_NAME is not set" >&2
   echo "💡 Possible causes:" >&2
   echo "   - build_context did not compute the function name" >&2
-  echo "   - Variable was not exported from a previous step" >&2
   echo "🔧 How to fix:" >&2
   echo "   - Ensure build_context runs before this script" >&2
-  echo "   - Check that LAMBDA_FUNCTION_NAME is exported" >&2
   return 1
 fi
 
@@ -20,10 +20,8 @@ if [ -z "${LAMBDA_ROLE_ARN:-}" ]; then
   echo "❌ LAMBDA_ROLE_ARN is not set" >&2
   echo "💡 Possible causes:" >&2
   echo "   - create_iam_role did not run or failed" >&2
-  echo "   - No execution role configured in cloud-provider context" >&2
   echo "🔧 How to fix:" >&2
   echo "   - Ensure create_iam_role runs before this script" >&2
-  echo "   - Check that LAMBDA_ROLE_ARN is exported" >&2
   return 1
 fi
 
@@ -31,89 +29,136 @@ if [ -z "${OUTPUT_DIR:-}" ]; then
   echo "❌ OUTPUT_DIR is not set" >&2
   echo "💡 Possible causes:" >&2
   echo "   - The scope runner did not set a working directory" >&2
-  echo "🔧 How to fix:" >&2
-  echo "   - Ensure OUTPUT_DIR is exported before running this script" >&2
   return 1
 fi
 
-echo "   📋 function_name=$LAMBDA_FUNCTION_NAME"
-echo "   📋 role_arn=$LAMBDA_ROLE_ARN"
-
-# Determine package type from capabilities or environment
-package_type="${PACKAGE_TYPE:-Zip}"
-runtime="${RUNTIME:-nodejs20.x}"
-handler="${HANDLER:-index.handler}"
+placeholder_image_base="${PLACEHOLDER_IMAGE_URI:-public.ecr.aws/nullplatform/aws-lambda/nullplatform-lambda-placeholder:latest}"
 architecture="${ARCHITECTURE:-arm64}"
 
-echo "   📋 package_type=$package_type"
-echo "   📋 runtime=$runtime"
-echo "   📋 handler=$handler"
-echo "   📋 architecture=$architecture"
+# Lambda does not support multi-arch manifest lists (OCI image index).
+# Images are published per-architecture with a -{arch} suffix on the tag.
+# Lambda uses "x86_64" but images are tagged with the Docker convention "amd64".
+arch_tag="${architecture}"
+[ "$architecture" = "x86_64" ] && arch_tag="amd64"
+
+if [[ "$placeholder_image_base" == *":"* ]]; then
+  placeholder_image_uri="${placeholder_image_base}-${arch_tag}"
+else
+  placeholder_image_uri="${placeholder_image_base}:latest-${arch_tag}"
+fi
+
+log debug "   📋 function_name=$LAMBDA_FUNCTION_NAME"
+log debug "   📋 role_arn=$LAMBDA_ROLE_ARN"
+log debug "   📋 architecture=$architecture"
+log debug "   📋 placeholder_image_uri=$placeholder_image_uri"
 
 # Check if function already exists
 echo ""
-echo "   📡 Checking if function already exists..."
+log info "   📡 Checking if function already exists..."
 
 existing_function=$(aws lambda get-function \
   --function-name "$LAMBDA_FUNCTION_NAME" \
   2>&1 || echo "NOT_FOUND")
 
 if ! echo "$existing_function" | grep -q "ResourceNotFoundException\|NOT_FOUND"; then
-  echo "   ✅ Function already exists - skipping creation"
+  log info "   ✅ Function already exists - skipping creation"
 
-  # Extract existing function ARN
   LAMBDA_FUNCTION_ARN=$(echo "$existing_function" | jq -r '.Configuration.FunctionArn')
   export LAMBDA_FUNCTION_ARN
+  export IMAGE_URI="$placeholder_image_uri"
 
-  echo "   📋 function_arn=$LAMBDA_FUNCTION_ARN"
+  log debug "   📋 function_arn=$LAMBDA_FUNCTION_ARN"
   return 0
 fi
 
-# Skip placeholder creation for container image deployments
-# The actual function will be created at first deployment with the real image
-if [ "$package_type" = "Image" ]; then
-  echo ""
-  echo "   📝 Skipping placeholder creation for container image deployment"
-  echo "   📋 The Lambda function will be created at first deployment with the actual container image"
+# Validate placeholder image exists
+echo ""
+log info "   📡 Validating placeholder image..."
 
-  # Store function name mapping in NRN so deployment knows what to create
-  LAMBDA_FUNCTION_ARN=""
-  export LAMBDA_FUNCTION_ARN
+image_found=false
 
-  echo ""
-  echo "✨ Placeholder skipped for container image scope: function_name=$LAMBDA_FUNCTION_NAME"
-  return 0
+if [[ "$placeholder_image_uri" == public.ecr.aws/* ]]; then
+  # Public ECR: validate via OCI token + manifest API (no AWS credentials needed)
+  image_ref="${placeholder_image_uri#public.ecr.aws/}"
+  image_tag="${image_ref##*:}"
+  image_path="${image_ref%:*}"
+  [[ "$image_ref" != *":"* ]] && { image_tag="latest"; image_path="$image_ref"; }
+
+  token_response=$(curl -sfL \
+    "https://public.ecr.aws/token/?scope=repository:${image_path}:pull&service=public.ecr.aws" \
+    2>/dev/null || echo "")
+
+  token=""
+  [ -n "$token_response" ] && token=$(echo "$token_response" | jq -r '.token // empty' 2>/dev/null || echo "")
+
+  if [ -z "$token" ]; then
+    echo "" >&2
+    echo "❌ Cannot reach public ECR to validate placeholder image" >&2
+    echo "" >&2
+    echo "💡 Possible causes:" >&2
+    echo "   • The agent has no outbound internet access" >&2
+    echo "   • public.ecr.aws is temporarily unavailable" >&2
+    echo "" >&2
+    echo "🔧 How to fix:" >&2
+    echo "   • Verify outbound connectivity: curl -s https://public.ecr.aws" >&2
+    return 1
+  fi
+
+  http_code=$(curl -s -o /dev/null -w "%{http_code}" \
+    -H "Authorization: Bearer $token" \
+    -H "Accept: application/vnd.docker.distribution.manifest.v2+json" \
+    "https://public.ecr.aws/v2/${image_path}/manifests/${image_tag}")
+
+  [ "$http_code" = "200" ] && image_found=true
+else
+  # Private ECR: validate via aws ecr describe-images (uses existing AWS credentials)
+  ecr_registry="${placeholder_image_uri%%/*}"
+  ecr_region=$(echo "$ecr_registry" | cut -d. -f4)
+  ecr_rest="${placeholder_image_uri#*/}"
+  ecr_repo="${ecr_rest%:*}"
+  ecr_tag="${ecr_rest##*:}"
+  [[ "$ecr_rest" != *":"* ]] && ecr_tag="latest"
+
+  if aws ecr describe-images \
+      --repository-name "$ecr_repo" \
+      --image-ids "imageTag=$ecr_tag" \
+      --region "$ecr_region" &>/dev/null 2>&1; then
+    image_found=true
+  fi
 fi
 
-# Create placeholder zip from embedded base64
-# Contains index.js with a minimal Node.js handler (compatible with all runtimes as placeholder)
-echo ""
-echo "   📝 Creating placeholder zip..."
+if [ "$image_found" = "false" ]; then
+  echo "" >&2
+  echo "❌ Placeholder image not found: $placeholder_image_uri" >&2
+  echo "" >&2
+  echo "💡 Possible causes:" >&2
+  echo "   • The image has not been published yet" >&2
+  echo "   • PLACEHOLDER_IMAGE_URI in values.yaml points to a wrong tag or path" >&2
+  echo "" >&2
+  echo "🔧 How to fix:" >&2
+  echo "   • Publish the image once by running: lambda/scope/placeholder/publish" >&2
+  echo "   • Verify PLACEHOLDER_IMAGE_URI=$placeholder_image_uri is correct" >&2
+  return 1
+fi
 
-zip_file="$OUTPUT_DIR/placeholder.zip"
-echo "UEsDBBQAAAAIABJ3V1wwajY9igAAAJ8AAAAIABwAaW5kZXguanNVVAkAA9SUnGnUlJxpdXgLAAEE9QEAAAQUAAAAHY1BCoMwFET3nmJ2KrQiXVrspjspbaEn+JpfFWIiybdtEO/eIMxiGB7z+DdbJ74YyCjNDjXIB9Mh4w8byVFfsCaAY1mc2SvghWTxV6u4wqksD/vYWhUqNK/HvfDiRtOP75CtmNh76iOYPjV1PFitouVGU6sIR9CXRokwFM/ahik6U2x5fNzOScwfUEsBAh4DFAAAAAgAEndXXDBqNj2KAAAAnwAAAAgAGAAAAAAAAQAAAKSBAAAAAGluZGV4LmpzVVQFAAPUlJxpdXgLAAEE9QEAAAQUAAAAUEsFBgAAAAABAAEATgAAAMwAAAAAAA==" \
-  | base64 -d > "$zip_file"
+log debug "   ✅ Placeholder image found"
 
-echo "   ✅ Placeholder zip ready"
-
-# Create the Lambda function
-echo ""
-echo "   📡 Creating Lambda function..."
-
-# Build create command with tags
+# Build tags argument for AWS CLI
 tags_arg=""
 if [ -n "${RESOURCE_TAGS_JSON:-}" ]; then
-  # Convert JSON to AWS CLI format
   tags_arg=$(echo "$RESOURCE_TAGS_JSON" | jq -r 'to_entries | map("\(.key)=\(.value)") | join(",")')
 fi
 
+# Create the Lambda function with the pre-built placeholder image
+echo ""
+log info "   📡 Creating Lambda function..."
+
 create_output=$(aws lambda create-function \
   --function-name "$LAMBDA_FUNCTION_NAME" \
-  --runtime "$runtime" \
-  --handler "$handler" \
+  --package-type Image \
+  --code "ImageUri=$placeholder_image_uri" \
   --architectures "$architecture" \
   --role "$LAMBDA_ROLE_ARN" \
-  --zip-file "fileb://$zip_file" \
   --memory-size 128 \
   --timeout 30 \
   --description "Placeholder Lambda - created by nullplatform" \
@@ -121,86 +166,86 @@ create_output=$(aws lambda create-function \
   2>&1)
 create_exit_code=$?
 
-if [ $create_exit_code -ne 0 ]; then
-  # Check if it's a retriable error (role propagation)
-  if echo "$create_output" | grep -q "The role defined for the function cannot be assumed"; then
-    echo "   ⚠️ Waiting for IAM role propagation..."
+# Retry on IAM role propagation delay
+if [ $create_exit_code -ne 0 ] && \
+   echo "$create_output" | grep -q "The role defined for the function cannot be assumed"; then
+  log warn "   ⚠️  Waiting for IAM role propagation..."
 
-    max_retries=5
-    retry_delay=10
+  max_retries=5
+  retry_delay=10
 
-    for i in $(seq 1 $max_retries); do
-      echo "   📝 Retry $i/$max_retries (waiting ${retry_delay}s)..."
-      sleep $retry_delay
+  for i in $(seq 1 $max_retries); do
+    log info "   📝 Retry $i/$max_retries (waiting ${retry_delay}s)..."
+    sleep "$retry_delay"
 
-      create_output=$(aws lambda create-function \
-        --function-name "$LAMBDA_FUNCTION_NAME" \
-        --runtime "$runtime" \
-        --handler "$handler" \
-        --architectures "$architecture" \
-        --role "$LAMBDA_ROLE_ARN" \
-        --zip-file "fileb://$zip_file" \
-        --memory-size 128 \
-        --timeout 30 \
-        --description "Placeholder Lambda - created by nullplatform" \
-        ${tags_arg:+--tags "$tags_arg"} \
-        2>&1)
-      create_exit_code=$?
+    create_output=$(aws lambda create-function \
+      --function-name "$LAMBDA_FUNCTION_NAME" \
+      --package-type Image \
+      --code "ImageUri=$placeholder_image_uri" \
+      --architectures "$architecture" \
+      --role "$LAMBDA_ROLE_ARN" \
+      --memory-size 128 \
+      --timeout 30 \
+      --description "Placeholder Lambda - created by nullplatform" \
+      ${tags_arg:+--tags "$tags_arg"} \
+      2>&1)
+    create_exit_code=$?
 
-      if [ $create_exit_code -eq 0 ]; then
-        break
-      fi
-
-      retry_delay=$((retry_delay + 10))
-    done
-  fi
+    [ $create_exit_code -eq 0 ] && break
+    retry_delay=$((retry_delay + 10))
+  done
 fi
 
-# Check final result
-if echo "$create_output" | grep -q "FunctionArn"; then
-  LAMBDA_FUNCTION_ARN=$(echo "$create_output" | jq -r '.FunctionArn')
-  echo "   ✅ Function created: function_arn=$LAMBDA_FUNCTION_ARN"
-else
+if ! echo "$create_output" | grep -q "FunctionArn"; then
+  echo "" >&2
   echo "❌ Failed to create Lambda function '$LAMBDA_FUNCTION_NAME'" >&2
-  echo "💡 Possible causes:" >&2
-  echo "   - IAM role not yet propagated (even after retries)" >&2
-  echo "   - Insufficient permissions to create Lambda functions" >&2
-  echo "   - Invalid runtime '$runtime' or architecture '$architecture'" >&2
-  echo "   - Resource limits exceeded in this AWS region" >&2
-  echo "🔧 How to fix:" >&2
-  echo "   - Verify the agent has lambda:CreateFunction permission" >&2
-  echo "   - Check that role_arn=$LAMBDA_ROLE_ARN exists and is assumable by Lambda" >&2
-  echo "   - AWS error: $create_output" >&2
+  echo "" >&2
 
-  # Rollback: clean up temporary files
-  rm -f "$zip_file"
+  if echo "$create_output" | grep -qi "ImageNotFoundException\|invalid.*image\|repository does not exist"; then
+    echo "  🖼️  Error: Placeholder image not found or not accessible" >&2
+    echo "" >&2
+    echo "  💡 Possible causes:" >&2
+    echo "    • The placeholder image has not been published yet" >&2
+    echo "    • PLACEHOLDER_IMAGE_URI=$placeholder_image_uri is incorrect" >&2
+    echo "" >&2
+    echo "  🔧 How to fix:" >&2
+    echo "    • Publish the image once by running: lambda/scope/placeholder/publish" >&2
+  else
+    echo "  💡 Possible causes:" >&2
+    echo "    • IAM role not yet propagated (even after retries)" >&2
+    echo "    • Insufficient permissions to create Lambda functions" >&2
+    echo "    • Invalid architecture '$architecture'" >&2
+    echo "" >&2
+    echo "  🔧 How to fix:" >&2
+    echo "    • Verify the agent has lambda:CreateFunction permission" >&2
+    echo "    • Check that role_arn=$LAMBDA_ROLE_ARN exists and is assumable by Lambda" >&2
+    echo "    • AWS error: $create_output" >&2
+  fi
 
-  echo "🔄 Rolling back: cleaning up resources..." >&2
-  # The caller should handle IAM role cleanup based on this exit code
-  # We only clean up resources created in this script
+  echo "" >&2
   return 1
 fi
 
-# Create main alias
+LAMBDA_FUNCTION_ARN=$(echo "$create_output" | jq -r '.FunctionArn')
+log debug "   ✅ Function created: function_arn=$LAMBDA_FUNCTION_ARN"
+
+# Create main alias pointing to $LATEST
 echo ""
-echo "   📝 Creating main alias..."
+log info "   📝 Creating main alias..."
 
 alias_name="${LAMBDA_MAIN_ALIAS_NAME:-main}"
 
-alias_output=$(aws lambda create-alias \
+aws lambda create-alias \
   --function-name "$LAMBDA_FUNCTION_NAME" \
   --name "$alias_name" \
   --function-version "\$LATEST" \
   --description "Main alias for traffic routing" \
-  2>&1 || true)
+  >/dev/null 2>&1 || true
 
-echo "   ✅ Alias '$alias_name' created for function $LAMBDA_FUNCTION_NAME"
+log debug "   ✅ Alias '$alias_name' created"
 
-# Cleanup temporary files
-rm -f "$zip_file"
-
-# Export function ARN
 export LAMBDA_FUNCTION_ARN
+export IMAGE_URI="$placeholder_image_uri"
 
 echo ""
-echo "✨ Placeholder Lambda created: function_name=$LAMBDA_FUNCTION_NAME, function_arn=$LAMBDA_FUNCTION_ARN"
+log info "✨ Placeholder Lambda created: function_name=$LAMBDA_FUNCTION_NAME, function_arn=$LAMBDA_FUNCTION_ARN"
