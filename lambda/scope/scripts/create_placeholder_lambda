@@ -65,6 +65,7 @@ if ! echo "$existing_function" | grep -q "ResourceNotFoundException\|NOT_FOUND";
 
   LAMBDA_FUNCTION_ARN=$(echo "$existing_function" | jq -r '.Configuration.FunctionArn')
   export LAMBDA_FUNCTION_ARN
+  export IMAGE_URI="$placeholder_image_uri"
 
   log debug "   📋 function_arn=$LAMBDA_FUNCTION_ARN"
   return 0
@@ -244,6 +245,7 @@ aws lambda create-alias \
 log debug "   ✅ Alias '$alias_name' created"
 
 export LAMBDA_FUNCTION_ARN
+export IMAGE_URI="$placeholder_image_uri"
 
 echo ""
 log info "✨ Placeholder Lambda created: function_name=$LAMBDA_FUNCTION_NAME, function_arn=$LAMBDA_FUNCTION_ARN"
