@@ -29,8 +29,6 @@ configuration:
   # NULL_AGENT_LAYER_ARN: "arn:aws:lambda:us-east-1:123456789012:layer:nullplatform-agent:1"
 
   # Default Lambda Settings
-  DEFAULT_RUNTIME: "nodejs20.x"
-  DEFAULT_HANDLER: "index.handler"
   DEFAULT_MEMORY: 256
   DEFAULT_TIMEOUT: 30
   DEFAULT_ARCHITECTURE: "arm64"
