@@ -83,7 +83,7 @@ teardown() {
   run bash "$LAMBDA_DIR/scope/build_context"
 
   assert_success
-  assert_output_contains "function_name=my-namespace-my-app-my-scope-scope-123"
+  assert_output_contains "function_name=scope-123-my-app-my-scope"
 }
 
 @test "scope/build_context: truncates function name to 64 characters" {
