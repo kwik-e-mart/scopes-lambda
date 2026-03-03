@@ -55,19 +55,7 @@ echo "   ✅ function_name=$LAMBDA_FUNCTION_NAME"
 VISIBILITY=$(echo "$CONTEXT" | jq -r '.scope.capabilities.visibility // "public"')
 echo "   ✅ visibility=$VISIBILITY"
 
-#Lambda capabilities (runtime, handler, architecture)
-RUNTIME=$(get_config_value \
-  --provider '.scope.capabilities.runtime' \
-  --env LAMBDA_RUNTIME \
-  --default "nodejs20.x"
-)
-
-HANDLER=$(get_config_value \
-  --provider '.scope.capabilities.handler' \
-  --env LAMBDA_HANDLER \
-  --default "index.handler"
-)
-
+#Lambda capabilities (architecture)
 ARCHITECTURE=$(get_config_value \
   --provider '.scope.capabilities.architecture' \
   --env LAMBDA_ARCHITECTURE \
@@ -80,8 +68,6 @@ ARCHITECTURE=$(get_config_value \
 PACKAGE_TYPE=$(echo "$CONTEXT" | jq -r '.scope.capabilities.package_type // "Zip"')
 
 echo "   ✅ package_type=$PACKAGE_TYPE"
-echo "   ✅ runtime=$RUNTIME"
-echo "   ✅ handler=$HANDLER"
 echo "   ✅ architecture=$ARCHITECTURE"
 
 #ALB listener rule capacity validation (private scopes use internal ALB)
@@ -162,12 +148,10 @@ export ACCOUNT_SLUG
 export LAMBDA_FUNCTION_NAME
 export VISIBILITY
 export PACKAGE_TYPE
-export RUNTIME
-export HANDLER
 export ARCHITECTURE
 export OUTPUT_DIR
 export RESOURCE_TAGS_JSON
 
 echo ""
-echo "📋 Function: $LAMBDA_FUNCTION_NAME | Visibility: $VISIBILITY | Runtime: $RUNTIME"
+echo "📋 Function: $LAMBDA_FUNCTION_NAME | Visibility: $VISIBILITY"
 echo "✨ Scope context built successfully"

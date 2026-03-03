@@ -25,10 +25,6 @@ steps:
         type: environment
       - name: PACKAGE_TYPE
         type: environment
-      - name: RUNTIME
-        type: environment
-      - name: HANDLER
-        type: environment
       - name: ARCHITECTURE
         type: environment
       - name: OUTPUT_DIR

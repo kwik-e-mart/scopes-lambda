@@ -171,20 +171,6 @@ fi
 echo ""
 log info "   ⚙️ Extracting Lambda configuration..."
 
-LAMBDA_RUNTIME=$(get_config_value \
-  --provider '.scope.capabilities.runtime' \
-  --env DEFAULT_RUNTIME \
-  --default "nodejs20.x"
-)
-log debug "   ✅ runtime=$LAMBDA_RUNTIME"
-
-LAMBDA_HANDLER=$(get_config_value \
-  --provider '.scope.capabilities.handler' \
-  --env DEFAULT_HANDLER \
-  --default "index.handler"
-)
-log debug "   ✅ handler=$LAMBDA_HANDLER"
-
 LAMBDA_MEMORY=$(get_config_value \
   --provider '.scope.capabilities.memory' \
   --env DEFAULT_MEMORY \
@@ -466,8 +452,6 @@ TOFU_VARIABLES=$(jq -n \
   --arg role_arn "$LAMBDA_ROLE_ARN" \
   --arg current_version "$LAMBDA_CURRENT_VERSION" \
   --arg main_alias_name "$LAMBDA_MAIN_ALIAS_NAME" \
-  --arg runtime "$LAMBDA_RUNTIME" \
-  --arg handler "$LAMBDA_HANDLER" \
   --arg memory "$LAMBDA_MEMORY" \
   --arg timeout "$LAMBDA_TIMEOUT" \
   --arg architecture "$LAMBDA_ARCHITECTURE" \
@@ -513,8 +497,6 @@ TOFU_VARIABLES=$(jq -n \
     role_arn: $role_arn,
     current_version: $current_version,
     main_alias_name: $main_alias_name,
-    runtime: $runtime,
-    handler: $handler,
     memory: ($memory | tonumber),
     timeout: ($timeout | tonumber),
     architecture: $architecture,
@@ -589,8 +571,6 @@ export AWS_REGION
 export ASSETS_ACCESS_KEY_ID
 export ASSETS_SECRET_ACCESS_KEY
 export ASSETS_REGION
-export LAMBDA_RUNTIME
-export LAMBDA_HANDLER
 export LAMBDA_MEMORY
 export LAMBDA_TIMEOUT
 export LAMBDA_ARCHITECTURE

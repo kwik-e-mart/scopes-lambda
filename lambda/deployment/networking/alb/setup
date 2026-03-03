@@ -4,25 +4,6 @@ source "$SERVICE_PATH/utils/log"
 
 log info "🔍 Validating ALB configuration..."
 
-# Check visibility - ALB is only for private scopes
-visibility=$(echo "$CONTEXT" | jq -r '.scope.capabilities.visibility // "public"')
-
-if [ "$visibility" != "private" ] && [ "$visibility" != "internal" ]; then
-  echo ""
-  log info "   ⏭️  Skipping ALB - visibility is '$visibility' (not private/internal)"
-  echo ""
-  # Include ALB stubs so Route53 module always has alb_dns_name / alb_zone_id locals declared
-  alb_stubs="$SERVICE_PATH/deployment/dns/route53/stubs_no_alb"
-  if [[ -n ${MODULES_TO_USE:-} ]]; then
-    MODULES_TO_USE="$MODULES_TO_USE,$alb_stubs"
-  else
-    MODULES_TO_USE="$alb_stubs"
-  fi
-  return 0 2>/dev/null || return 0
-fi
-
-log debug "   ✅ visibility=$visibility"
-
 # Get ALB listener ARN from context or environment
 alb_listener_arn=$(echo "$CONTEXT" | jq -r '.providers["cloud-providers"].alb.listener_arn // empty')
 

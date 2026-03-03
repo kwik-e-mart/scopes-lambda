@@ -4,8 +4,6 @@
     "schema": {
       "type": "object",
       "required": [
-        "runtime",
-        "handler",
         "memory",
         "timeout",
         "architecture",
@@ -20,16 +18,6 @@
       "uiSchema": {
         "type": "VerticalLayout",
         "elements": [
-          {
-            "type": "Control",
-            "label": "Runtime",
-            "scope": "#/properties/runtime"
-          },
-          {
-            "type": "Control",
-            "label": "Handler",
-            "scope": "#/properties/handler"
-          },
           {
             "type": "Control",
             "label": "Memory",
@@ -173,76 +161,6 @@
           "export": false,
           "default": "lambda-package"
         },
-        "runtime": {
-          "type": "string",
-          "title": "Runtime",
-          "description": "Lambda runtime environment for your function",
-          "default": "nodejs20.x",
-          "oneOf": [
-            {
-              "const": "nodejs20.x",
-              "title": "Node.js 20"
-            },
-            {
-              "const": "nodejs18.x",
-              "title": "Node.js 18"
-            },
-            {
-              "const": "python3.12",
-              "title": "Python 3.12"
-            },
-            {
-              "const": "python3.11",
-              "title": "Python 3.11"
-            },
-            {
-              "const": "python3.10",
-              "title": "Python 3.10"
-            },
-            {
-              "const": "java21",
-              "title": "Java 21"
-            },
-            {
-              "const": "java17",
-              "title": "Java 17"
-            },
-            {
-              "const": "java11",
-              "title": "Java 11"
-            },
-            {
-              "const": "dotnet8",
-              "title": ".NET 8"
-            },
-            {
-              "const": "dotnet6",
-              "title": ".NET 6"
-            },
-            {
-              "const": "ruby3.3",
-              "title": "Ruby 3.3"
-            },
-            {
-              "const": "ruby3.2",
-              "title": "Ruby 3.2"
-            },
-            {
-              "const": "provided.al2023",
-              "title": "Custom Runtime (AL2023)"
-            },
-            {
-              "const": "provided.al2",
-              "title": "Custom Runtime (AL2)"
-            }
-          ]
-        },
-        "handler": {
-          "type": "string",
-          "title": "Handler",
-          "description": "Function entry point (e.g., index.handler for Node.js, app.lambda_handler for Python)",
-          "default": "index.handler"
-        },
         "memory": {
           "type": "integer",
           "title": "Memory (MB)",
@@ -304,11 +222,11 @@
         "visibility": {
           "type": "string",
           "title": "Visibility",
-          "description": "How your function is accessed (public via API Gateway, private via internal ALB)",
+          "description": "How your function is accessed (public, private)",
           "default": "public",
           "oneOf": [
-            { "const": "public", "title": "Public (API Gateway)" },
-            { "const": "private", "title": "Private (ALB)" }
+            { "const": "public", "title": "Public" },
+            { "const": "private", "title": "Private" }
           ]
         },
         "reserved_concurrency": {

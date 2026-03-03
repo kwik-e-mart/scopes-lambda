@@ -52,15 +52,11 @@ else
 fi
 
 # Extract capabilities from scope
-runtime=$(echo "$CONTEXT" | jq -r '.scope.capabilities.runtime // "nodejs20.x"')
-handler=$(echo "$CONTEXT" | jq -r '.scope.capabilities.handler // "index.handler"')
 memory=$(echo "$CONTEXT" | jq -r '.scope.capabilities.memory // 256')
 timeout=$(echo "$CONTEXT" | jq -r '.scope.capabilities.timeout // 30')
 ephemeral_storage=$(echo "$CONTEXT" | jq -r '.scope.capabilities.ephemeral_storage // 512')
 architecture=$(echo "$CONTEXT" | jq -r '.scope.capabilities.architecture // "arm64"')
 
-log debug "   ✅ runtime=$runtime"
-log debug "   ✅ handler=$handler"
 log debug "   ✅ memory=${memory}MB"
 log debug "   ✅ timeout=${timeout}s"
 log debug "   ✅ architecture=$architecture"
@@ -157,8 +153,6 @@ log debug "   ✅ function_name=$lambda_function_name"
 # Build TOFU_VARIABLES
 TOFU_VARIABLES=$(echo "$TOFU_VARIABLES" | jq \
   --arg function_name "$lambda_function_name" \
-  --arg runtime "$runtime" \
-  --arg handler "$handler" \
   --argjson memory "$memory" \
   --argjson timeout "$timeout" \
   --argjson ephemeral_storage "$ephemeral_storage" \
@@ -179,8 +173,6 @@ TOFU_VARIABLES=$(echo "$TOFU_VARIABLES" | jq \
   --arg lambda_description "$deployment_id" \
   '. + {
     lambda_function_name: $function_name,
-    lambda_runtime: $runtime,
-    lambda_handler: $handler,
     lambda_memory_size: $memory,
     lambda_timeout: $timeout,
     lambda_ephemeral_storage: $ephemeral_storage,
