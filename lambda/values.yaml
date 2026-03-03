@@ -74,7 +74,7 @@ configuration:
   #   AWS_LAMBDA_DEDICATED_ROLE_ENTITY: "scope" or "deployment"
 
   # Parameters Strategy: "env" (Lambda env vars) or "secretsmanager" (AWS Secrets Manager)
-  PARAMETERS_STRATEGY: "env"
+  PARAMETERS_STRATEGY: "secretsmanager"
 
   # Placeholder Lambda container image (created once via lambda/scope/placeholder/publish)
   PLACEHOLDER_IMAGE_URI: "688720756067.dkr.ecr.us-east-1.amazonaws.com/aws-lambda/nullplatform-lambda-placeholder:latest"
