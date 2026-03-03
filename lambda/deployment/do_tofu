@@ -153,26 +153,28 @@ if [ "$TOFU_ACTION" = "apply" ]; then
     fi
   fi
 
-  # If the alias was created by scope provisioning pointing to $LATEST (placeholder),
-  # Tofu imports it but ignores function_version due to lifecycle.ignore_changes.
-  # Explicitly update the alias to the published version so blue-green traffic
-  # switching works correctly on the first deployment.
-  if [ -n "$LAMBDA_CURRENT_VERSION" ] && [ "$LAMBDA_CURRENT_VERSION" != "" ]; then
+  # Tofu manages the alias with lifecycle.ignore_changes on function_version, so it
+  # never updates the alias version directly. We do it explicitly here for non-blue-green
+  # deployments whenever the alias lags behind the newly published version — this covers:
+  #   • First deploy after scope create (alias at placeholder version, e.g. "1")
+  #   • First deploy on a fresh scope where alias still points to $LATEST
+  if [ -n "$LAMBDA_CURRENT_VERSION" ] && [ "$LAMBDA_CURRENT_VERSION" != "" ] && \
+     [ "${IS_BLUE_GREEN:-false}" != "true" ]; then
     current_alias_version=$(aws lambda get-alias \
       --function-name "$LAMBDA_FUNCTION_NAME" \
       --name "$main_alias_name" \
       --query 'FunctionVersion' \
       --output text 2>/dev/null || echo "")
 
-    if [ "$current_alias_version" = '$LATEST' ]; then
+    if [ -n "$current_alias_version" ] && [ "$current_alias_version" != "$LAMBDA_CURRENT_VERSION" ]; then
       echo ""
-      log info "   📡 Alias points to \$LATEST - updating to published version $LAMBDA_CURRENT_VERSION..."
+      log info "   📡 Alias points to $current_alias_version - updating to published version $LAMBDA_CURRENT_VERSION..."
       aws lambda update-alias \
         --function-name "$LAMBDA_FUNCTION_NAME" \
         --name "$main_alias_name" \
         --function-version "$LAMBDA_CURRENT_VERSION" \
         --routing-config '{}' >/dev/null 2>&1 || true
-      log debug "   ✅ Alias updated from \$LATEST to version $LAMBDA_CURRENT_VERSION"
+      log debug "   ✅ Alias updated from $current_alias_version to version $LAMBDA_CURRENT_VERSION"
     fi
   fi
 fi
