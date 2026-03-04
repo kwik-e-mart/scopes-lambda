@@ -39,6 +39,8 @@ steps:
         type: environment
       - name: RESOURCE_TAGS_JSON
         type: environment
+      - name: SECRETS_MANAGER_SECRET_NAME
+        type: environment
   - name: sync_parameters_to_secrets_manager
     type: script
     file: "$SERVICE_PATH/deployment/scripts/sync_parameters_to_secrets_manager"

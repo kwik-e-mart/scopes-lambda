@@ -14,6 +14,9 @@ steps:
   - name: delete_lambda
     type: script
     file: "$SERVICE_PATH/scope/scripts/delete_lambda"
+  - name: delete_sm_secrets
+    type: script
+    file: "$SERVICE_PATH/scope/scripts/delete_sm_secret"
   - name: delete_iam_role
     type: script
     file: "$SERVICE_PATH/scope/scripts/delete_iam_role"

@@ -128,6 +128,13 @@ if [ -n "${ALB_RULE_PRIORITY:-}" ]; then
   log debug "   ✅ alb_rule_priority=$ALB_RULE_PRIORITY"
 fi
 
+if [ -n "${SECRETS_MANAGER_SECRET_NAME:-}" ]; then
+  metadata=$(echo "$metadata" | jq \
+    --arg val "$SECRETS_MANAGER_SECRET_NAME" \
+    '. + {secrets_manager_secret_name: $val}')
+  log debug "   ✅ secrets_manager_secret_name=$SECRETS_MANAGER_SECRET_NAME"
+fi
+
 if [ -n "${WARMUP_ALIAS_NAME:-}" ]; then
   metadata=$(echo "$metadata" | jq \
     --arg val "$WARMUP_ALIAS_NAME" \

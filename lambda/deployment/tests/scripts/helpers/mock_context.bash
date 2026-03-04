@@ -324,9 +324,9 @@ export MOCK_CONTEXT_SECRETSMANAGER='{
   },
   "parameters": {
     "results": [
-      {"name": "DB_HOST", "value": "db.example.com"},
-      {"name": "DB_PASSWORD", "value": "secret123", "secret": true},
-      {"name": "API_KEY", "value": "key-abc-123", "secret": true}
+      {"variable": "DB_HOST", "name": "DB_HOST", "values": [{"value": "db.example.com"}]},
+      {"variable": "DB_PASSWORD", "name": "DB_PASSWORD", "secret": true, "values": [{"value": "secret123"}]},
+      {"variable": "API_KEY", "name": "API_KEY", "secret": true, "values": [{"value": "key-abc-123"}]}
     ]
   },
   "providers": {
