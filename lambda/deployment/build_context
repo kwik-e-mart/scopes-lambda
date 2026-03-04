@@ -354,12 +354,8 @@ else
   log debug "   ✅ environment_variables_count=$(echo "$LAMBDA_ENVIRONMENT_VARIABLES" | jq 'length')"
 fi
 
-# Inject special environment variables
-LAMBDA_ENVIRONMENT_VARIABLES=$(echo "$LAMBDA_ENVIRONMENT_VARIABLES" | jq \
-  --arg np_deployment_id "$DEPLOYMENT_ID" \
-  --arg np_scope_id "$SCOPE_ID" \
-  --arg np_parameters_name "${SECRETS_MANAGER_SECRET_NAME:-}" \
-  '. + {NP_DEPLOYMENT_ID: $np_deployment_id, NP_SCOPE_ID: $np_scope_id, NP_PARAMETERS_NAME: $np_parameters_name}')
+log debug "   ✅ environment_variables_count=$(echo "$LAMBDA_ENVIRONMENT_VARIABLES" | jq 'length')"
+
 
 # null agent configuration
 echo ""

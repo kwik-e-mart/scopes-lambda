@@ -121,9 +121,17 @@ env_vars=$(echo "$CONTEXT" | jq -c '
 
 # Add deployment metadata to environment
 deployment_id=$(echo "$CONTEXT" | jq -r '.deployment.id')
+scope_id=$(echo "$CONTEXT" | jq -r '.scope.id')
 env_vars=$(echo "$env_vars" | jq \
   --arg deployment_id "$deployment_id" \
-  '. + {NP_DEPLOYMENT_ID: $deployment_id}')
+  --arg scope_id "$scope_id" \
+  '. + {NP_DEPLOYMENT_ID: $deployment_id, NP_SCOPE_ID: $scope_id}')
+
+if [ -n "${SECRETS_MANAGER_SECRET_NAME:-}" ]; then
+  env_vars=$(echo "$env_vars" | jq \
+    --arg secret_name "$SECRETS_MANAGER_SECRET_NAME" \
+    '. + {NP_PARAMETERS_NAME: $secret_name}')
+fi
 
 # Add agent wrapper if using nullplatform layer
 if [ "${USE_NULL_AGENT:-true}" = "true" ] && [ -n "${NULL_AGENT_LAYER_ARN:-}" ]; then
