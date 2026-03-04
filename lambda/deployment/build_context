@@ -55,12 +55,10 @@ log info "📋 Scope: $SCOPE_ID | Deployment: $DEPLOYMENT_ID | Strategy: $DEPLOY
 echo ""
 log info "   📡 Reading Lambda metadata from NRN..."
 
-# Preserve values that may already be set by upstream steps (e.g. scope create)
+# Preserve function ARN that may already be set by upstream steps (e.g. scope create)
 _env_function_arn="${LAMBDA_FUNCTION_ARN:-}"
-_env_role_arn="${LAMBDA_ROLE_ARN:-}"
 
 LAMBDA_FUNCTION_ARN=""
-LAMBDA_ROLE_ARN=""
 LAMBDA_CURRENT_VERSION=""
 LAMBDA_GREEN_VERSION=""
 LAMBDA_BLUE_VERSION=""
@@ -69,13 +67,12 @@ LAMBDA_MAIN_ALIAS_NAME="${LAMBDA_MAIN_ALIAS_NAME:-main}"
 # Determine deployment IDs before NRN read so we can fetch per-deployment versions
 BLUE_DEPLOYMENT_ID=$(echo "$CONTEXT" | jq -r '.scope.current_active_deployment // ""')
 
-nrn_ids="lambda.lambda_function_arn,lambda.lambda_role_arn,lambda.lambda_function_main_alias,lambda.lambda_current_reserved_concurrency_type,lambda.lambda_current_reserved_concurrency_value,lambda.lambda_current_provisioned_concurrency_type,lambda.lambda_current_provisioned_concurrency_value"
+nrn_ids="lambda.lambda_function_arn,lambda.lambda_function_main_alias,lambda.lambda_current_reserved_concurrency_type,lambda.lambda_current_reserved_concurrency_value,lambda.lambda_current_provisioned_concurrency_type,lambda.lambda_current_provisioned_concurrency_value"
 
 nrn_output=$(np nrn read --nrn "$SCOPE_NRN" --ids "$nrn_ids" --format json 2>&1 || echo "{}")
 
 if [ "$nrn_output" != "{}" ]; then
   LAMBDA_FUNCTION_ARN=$(echo "$nrn_output" | jq -r '.namespaces.lambda.lambda_function_arn // ""')
-  LAMBDA_ROLE_ARN=$(echo "$nrn_output" | jq -r '.namespaces.lambda.lambda_role_arn // ""')
   stored_alias=$(echo "$nrn_output" | jq -r '.namespaces.lambda.lambda_function_main_alias // ""')
   if [ -n "$stored_alias" ] && [ "$stored_alias" != "null" ]; then
     LAMBDA_MAIN_ALIAS_NAME="$stored_alias"
@@ -93,10 +90,9 @@ else
   LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_VALUE=""
 fi
 
-# Fall back to env-provided values if NRN did not have them
+# Fall back to env-provided value if NRN did not have it
 # (e.g. during scope create, NRN has no lambda.* keys yet)
 [ -z "$LAMBDA_FUNCTION_ARN" ] && LAMBDA_FUNCTION_ARN="$_env_function_arn"
-[ -z "$LAMBDA_ROLE_ARN" ]    && LAMBDA_ROLE_ARN="$_env_role_arn"
 
 # Look up Lambda versions by deployment ID (each published version embeds the deployment ID as description)
 log info "   📡 Looking up Lambda versions by deployment ID..."
@@ -448,7 +444,6 @@ TOFU_VARIABLES=$(jq -n \
   --arg state_key "$STATE_KEY" \
   --arg function_name "$LAMBDA_FUNCTION_NAME" \
   --arg function_arn "$LAMBDA_FUNCTION_ARN" \
-  --arg role_arn "$LAMBDA_ROLE_ARN" \
   --arg current_version "$LAMBDA_CURRENT_VERSION" \
   --arg main_alias_name "$LAMBDA_MAIN_ALIAS_NAME" \
   --arg memory "$LAMBDA_MEMORY" \
@@ -493,7 +488,6 @@ TOFU_VARIABLES=$(jq -n \
     state_key: $state_key,
     function_name: $function_name,
     function_arn: $function_arn,
-    role_arn: $role_arn,
     current_version: $current_version,
     main_alias_name: $main_alias_name,
     memory: ($memory | tonumber),
@@ -541,10 +535,9 @@ log debug "   ✅ tofu_variables=built ($(echo "$TOFU_VARIABLES" | jq 'keys | le
 # Add Lambda context to CONTEXT for layer setup scripts
 CONTEXT=$(echo "$CONTEXT" | jq \
   --arg fn "$LAMBDA_FUNCTION_NAME" \
-  --arg role "$LAMBDA_ROLE_ARN" \
   --arg version "$LAMBDA_CURRENT_VERSION" \
   --arg alias "$LAMBDA_MAIN_ALIAS_NAME" \
-  '. + {lambda: {function_name: $fn, role_arn: $role, current_version: $version, main_alias: $alias}}')
+  '. + {lambda: {function_name: $fn, current_version: $version, main_alias: $alias}}')
 
 # Export all variables
 export SCOPE_ID
@@ -556,7 +549,6 @@ export SCOPE_SLUG
 export ACCOUNT_SLUG
 export LAMBDA_FUNCTION_NAME
 export LAMBDA_FUNCTION_ARN
-export LAMBDA_ROLE_ARN
 export LAMBDA_CURRENT_VERSION
 export LAMBDA_GREEN_VERSION
 export LAMBDA_BLUE_VERSION
