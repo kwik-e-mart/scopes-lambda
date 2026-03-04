@@ -4,33 +4,36 @@ source "$SERVICE_PATH/utils/log"
 
 log info "🔍 Configuring IAM role for deployment..."
 
-# The IAM role name is deterministic: ${LAMBDA_FUNCTION_NAME}-role
-# No NRN state needed — AWS IAM is the source of truth.
+# If LAMBDA_ROLE_ARN is already set (e.g. exported by create_iam_role during scope create),
+# use it directly. Otherwise derive role name from LAMBDA_FUNCTION_NAME and look up in AWS.
+role_arn="${LAMBDA_ROLE_ARN:-}"
 
-role_name="${LAMBDA_FUNCTION_NAME}-role"
-role_name="${role_name:0:64}"
+if [ -z "$role_arn" ] || [ "$role_arn" = "null" ]; then
+  role_name="${LAMBDA_FUNCTION_NAME}-role"
+  role_name="${role_name:0:64}"
+  log debug "   ✅ role_name=$role_name (lookup)"
 
-log debug "   ✅ role_name=$role_name"
+  role_output=$(aws iam get-role --role-name "$role_name" 2>&1)
+  role_exit=$?
 
-role_output=$(aws iam get-role --role-name "$role_name" 2>&1)
-role_exit=$?
+  if [ $role_exit -ne 0 ]; then
+    echo ""
+    echo "   ❌ IAM role '$role_name' not found" >&2
+    echo "" >&2
+    echo "  💡 Possible causes:" >&2
+    echo "    • Scope was not created via the standard create workflow" >&2
+    echo "    • create_iam_role script failed during scope creation" >&2
+    echo "" >&2
+    echo "  🔧 How to fix:" >&2
+    echo "    • Re-run the scope create workflow to provision the IAM role" >&2
+    echo "    • AWS error: $role_output" >&2
+    echo "" >&2
+    return 1
+  fi
 
-if [ $role_exit -ne 0 ]; then
-  echo ""
-  echo "   ❌ IAM role '$role_name' not found" >&2
-  echo "" >&2
-  echo "  💡 Possible causes:" >&2
-  echo "    • Scope was not created via the standard create workflow" >&2
-  echo "    • create_iam_role script failed during scope creation" >&2
-  echo "" >&2
-  echo "  🔧 How to fix:" >&2
-  echo "    • Re-run the scope create workflow to provision the IAM role" >&2
-  echo "    • AWS error: $role_output" >&2
-  echo "" >&2
-  return 1
+  role_arn=$(echo "$role_output" | jq -r '.Role.Arn')
 fi
 
-role_arn=$(echo "$role_output" | jq -r '.Role.Arn')
 log debug "   ✅ role_arn=$role_arn"
 
 TOFU_VARIABLES=$(echo "$TOFU_VARIABLES" | jq \
