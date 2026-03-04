@@ -326,8 +326,9 @@ log debug "   ✅ parameters_strategy=$PARAMETERS_STRATEGY"
 SECRETS_MANAGER_SECRET_ARN=""
 
 if [ "$PARAMETERS_STRATEGY" = "secretsmanager" ]; then
-  # Secrets Manager strategy: parameters go to SM, Lambda gets secret ARN
-  SECRETS_MANAGER_SECRET_NAME="nullplatform/${SCOPE_ID}/parameters"
+  # Secrets Manager strategy: parameters go to SM, Lambda gets secret name
+  # One secret per deployment for immutability
+  SECRETS_MANAGER_SECRET_NAME="nullplatform/${SCOPE_ID}/${DEPLOYMENT_ID}/parameters"
   AWS_ACCOUNT_ID=$(echo "$CONTEXT" | jq -r '.providers["cloud-providers"].credentials.account_id // ""')
 
   if [ -n "$AWS_ACCOUNT_ID" ] && [ "$AWS_ACCOUNT_ID" != "null" ]; then
@@ -348,15 +349,13 @@ if [ "$PARAMETERS_STRATEGY" = "secretsmanager" ]; then
 else
   # Env vars strategy: parameters go directly as Lambda env vars
   LAMBDA_ENVIRONMENT_VARIABLES=$(echo "$CONTEXT" | jq -c '
-    [.parameters.results // [] | .[] | {(.name): .value}] | add // {}
+    [.parameters.results // [] | .[] | {(.variable): (.values[0].value // empty)}] | add // {}
   ')
   log debug "   ✅ environment_variables_count=$(echo "$LAMBDA_ENVIRONMENT_VARIABLES" | jq 'length')"
 fi
 
-# Inject special environment variables
-LAMBDA_ENVIRONMENT_VARIABLES=$(echo "$LAMBDA_ENVIRONMENT_VARIABLES" | jq \
-  --arg np_deployment_id "$DEPLOYMENT_ID" \
-  '. + {NP_DEPLOYMENT_ID: $np_deployment_id}')
+log debug "   ✅ environment_variables_count=$(echo "$LAMBDA_ENVIRONMENT_VARIABLES" | jq 'length')"
+
 
 # null agent configuration
 echo ""
@@ -595,6 +594,7 @@ export S3_BUCKET
 export S3_KEY
 export LAMBDA_ENVIRONMENT_VARIABLES
 export PARAMETERS_STRATEGY
+export SECRETS_MANAGER_SECRET_NAME
 export SECRETS_MANAGER_SECRET_ARN
 export USE_NULL_AGENT
 export NULL_AGENT_LAYER_ARN
