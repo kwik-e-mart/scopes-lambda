@@ -147,6 +147,38 @@ else
     fi
     echo "   ✅ Added inline policy: ecr-image-pull"
   fi
+
+  # SQS consume — required for SQS trigger (conditional)
+  sqs_queue_arns=$(echo "$CONTEXT" | jq '.scope.capabilities.triggers.sqs.queue_arns // []')
+  sqs_queue_count=$(echo "$sqs_queue_arns" | jq 'length')
+
+  if [ "$sqs_queue_count" -gt 0 ]; then
+    sqs_policy=$(echo "$sqs_queue_arns" | jq -c \
+      '{
+        Version: "2012-10-17",
+        Statement: [{
+          Effect: "Allow",
+          Action: [
+            "sqs:ReceiveMessage",
+            "sqs:DeleteMessage",
+            "sqs:GetQueueAttributes"
+          ],
+          Resource: .
+        }]
+      }')
+
+    put_output=$(aws iam put-role-policy \
+      --role-name "$iam_role_name" \
+      --policy-name "sqs-consume" \
+      --policy-document "$sqs_policy" \
+      2>&1)
+    if [ $? -ne 0 ]; then
+      echo "❌ Failed to put sqs-consume policy" >&2
+      echo "   - AWS error: $put_output" >&2
+      return 1
+    fi
+    echo "   ✅ Added inline policy: sqs-consume ($sqs_queue_count queue(s))"
+  fi
 fi
 
 export LAMBDA_ROLE_ARN

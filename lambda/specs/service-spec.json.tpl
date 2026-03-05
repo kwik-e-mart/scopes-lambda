@@ -150,6 +150,16 @@
                     "scope": "#/properties/continuous_delivery/properties/branches"
                   }
                 ]
+              },
+              {
+                "type": "Category",
+                "label": "Triggers",
+                "elements": [
+                  {
+                    "type": "Control",
+                    "scope": "#/properties/triggers/properties/sqs/properties/queue_arns"
+                  }
+                ]
               }
             ]
           }
@@ -321,6 +331,29 @@
             }
           },
           "description": "Configure automatic deployment from Git branches"
+        },
+        "triggers": {
+          "type": "object",
+          "title": "Triggers",
+          "properties": {
+            "sqs": {
+              "type": "object",
+              "title": "SQS",
+              "description": "Configure SQS event source mappings for this function",
+              "properties": {
+                "queue_arns": {
+                  "type": "array",
+                  "title": "SQS Queue ARNs",
+                  "description": "ARNs of SQS queues that will trigger this function. Changes take effect on next deployment.",
+                  "items": {
+                    "type": "string"
+                  },
+                  "default": []
+                }
+              }
+            }
+          },
+          "default": {}
         }
       }
     }

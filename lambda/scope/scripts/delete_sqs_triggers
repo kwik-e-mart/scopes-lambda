@@ -1,0 +1,53 @@
+#!/bin/bash
+# Delete all SQS Event Source Mappings for this Lambda function
+
+source "$SERVICE_PATH/utils/log"
+
+log info "🔍 Cleaning up SQS triggers..."
+
+if [ -z "${LAMBDA_FUNCTION_NAME:-}" ]; then
+  log warn "❌ LAMBDA_FUNCTION_NAME is required"
+  return 1
+fi
+
+log debug "   ✅ function_name=$LAMBDA_FUNCTION_NAME"
+
+# List all SQS ESMs for this function
+echo ""
+log info "   📡 Listing SQS event source mappings for '$LAMBDA_FUNCTION_NAME'..."
+
+list_output=$(aws lambda list-event-source-mappings \
+  --function-name "$LAMBDA_FUNCTION_NAME" \
+  --output json 2>&1)
+list_exit=$?
+
+if [ $list_exit -ne 0 ]; then
+  log warn "   ⚠️  Could not list event source mappings (function may already be deleted): $list_output"
+  echo ""
+  log info "✨ SQS trigger cleanup complete"
+  return 0
+fi
+
+esm_uuids=$(echo "$list_output" | jq -r '.EventSourceMappings[] | select(.EventSourceArn | startswith("arn:aws:sqs:")) | .UUID')
+
+if [ -z "$esm_uuids" ]; then
+  log info "   ✅ No SQS event source mappings found"
+  echo ""
+  log info "✨ SQS trigger cleanup complete"
+  return 0
+fi
+
+# Delete each ESM
+while IFS= read -r uuid; do
+  [ -z "$uuid" ] && continue
+  log info "   📝 Deleting ESM: $uuid..."
+  delete_output=$(aws lambda delete-event-source-mapping \
+    --uuid "$uuid" \
+    2>&1)
+  if [ $? -ne 0 ]; then
+    log warn "   ⚠️  Failed to delete ESM $uuid (may already be deleted): $delete_output"
+  fi
+done <<< "$esm_uuids"
+
+echo ""
+log info "✨ SQS trigger cleanup complete"
