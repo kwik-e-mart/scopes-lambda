@@ -4,6 +4,13 @@ source "$SERVICE_PATH/utils/log"
 
 log info "🔍 Validating ALB configuration..."
 
+# Skip ALB entirely for event-driven scopes (no HTTP networking needed)
+visibility=$(echo "$CONTEXT" | jq -r '.scope.capabilities.visibility // "public"')
+if [ "$visibility" = "event-driven" ]; then
+  log info "   ⏭️  Skipping ALB - visibility is 'event-driven' (no HTTP networking)"
+  return 0
+fi
+
 # Get ALB listener ARN from context or environment
 alb_listener_arn=$(echo "$CONTEXT" | jq -r '.providers["cloud-providers"].alb.listener_arn // empty')
 

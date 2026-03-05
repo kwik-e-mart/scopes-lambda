@@ -39,8 +39,8 @@ log debug "   ✅ application=$APPLICATION_SLUG"
 log debug "   ✅ scope=$SCOPE_SLUG"
 
 # Generate Lambda function name (max 64 chars)
-# Format: {namespace}-{application}-{scope}-{scope_id}
-LAMBDA_FUNCTION_NAME="${NAMESPACE_SLUG}-${APPLICATION_SLUG}-${SCOPE_SLUG}-${SCOPE_ID}"
+# Format: {scope_id}-{application}-{scope}
+LAMBDA_FUNCTION_NAME="${SCOPE_ID}-${APPLICATION_SLUG}-${SCOPE_SLUG}"
 LAMBDA_FUNCTION_NAME="${LAMBDA_FUNCTION_NAME:0:64}"
 log debug "   ✅ function_name=$LAMBDA_FUNCTION_NAME"
 
@@ -321,9 +321,9 @@ log debug "   ✅ parameters_strategy=$PARAMETERS_STRATEGY"
 
 SECRETS_MANAGER_SECRET_ARN=""
 
-if [ "$PARAMETERS_STRATEGY" = "secretsmanager" ]; then
+if [ "$PARAMETERS_STRATEGY" = "secretsmanager" ] && [ -n "$DEPLOYMENT_ID" ]; then
   # Secrets Manager strategy: parameters go to SM, Lambda gets secret name
-  # One secret per deployment for immutability
+  # One secret per deployment for immutability (requires a deployment ID)
   SECRETS_MANAGER_SECRET_NAME="nullplatform/${SCOPE_ID}/${DEPLOYMENT_ID}/parameters"
   AWS_ACCOUNT_ID=$(echo "$CONTEXT" | jq -r '.providers["cloud-providers"].credentials.account_id // ""')
 

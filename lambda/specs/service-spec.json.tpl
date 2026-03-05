@@ -222,11 +222,12 @@
         "visibility": {
           "type": "string",
           "title": "Visibility",
-          "description": "How your function is accessed (public, private)",
+          "description": "How your function is accessed (public, private, event-driven)",
           "default": "public",
           "oneOf": [
             { "const": "public", "title": "Public" },
-            { "const": "private", "title": "Private" }
+            { "const": "private", "title": "Private" },
+            { "const": "event-driven", "title": "Event-Driven (no HTTP)" }
           ]
         },
         "reserved_concurrency": {
