@@ -123,10 +123,15 @@ else
 
   if [ -n "$existing_policy_name" ]; then
     echo "   📝 Removing sqs-consume policy from '$role_name' (no queues configured)..."
-    aws iam delete-role-policy \
+    delete_output=$(aws iam delete-role-policy \
       --role-name "$role_name" \
       --policy-name "sqs-consume" \
-      2>/dev/null || true
+      2>&1)
+    if [ $? -ne 0 ]; then
+      echo "❌ Failed to delete sqs-consume policy from '$role_name'" >&2
+      echo "   - AWS error: $delete_output" >&2
+      exit 1
+    fi
     echo "   ✅ sqs-consume policy removed"
   else
     echo "   ✅ No SQS policy changes needed"
