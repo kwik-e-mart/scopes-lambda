@@ -9,3 +9,15 @@ variable "sqs_enabled" {
   type        = bool
   default     = false
 }
+
+variable "sqs_batch_size" {
+  description = "Maximum number of records in each batch sent to the function"
+  type        = number
+  default     = 10
+}
+
+variable "sqs_maximum_batching_window_in_seconds" {
+  description = "Maximum time in seconds to gather records before invoking the function (0 = invoke immediately)"
+  type        = number
+  default     = 0
+}
