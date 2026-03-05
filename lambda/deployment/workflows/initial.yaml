@@ -101,6 +101,14 @@ steps:
             type: environment
           - name: ALB_RULE_PRIORITY
             type: environment
+  - name: setup_sqs_trigger
+    type: script
+    file: "$SERVICE_PATH/deployment/triggers/sqs/setup"
+    output:
+      - name: TOFU_VARIABLES
+        type: environment
+      - name: MODULES_TO_USE
+        type: environment
   - name: compose_modules
     type: script
     file: "$SERVICE_PATH/deployment/compose_modules"
