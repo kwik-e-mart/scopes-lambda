@@ -321,9 +321,9 @@ log debug "   ✅ parameters_strategy=$PARAMETERS_STRATEGY"
 
 SECRETS_MANAGER_SECRET_ARN=""
 
-if [ "$PARAMETERS_STRATEGY" = "secretsmanager" ]; then
+if [ "$PARAMETERS_STRATEGY" = "secretsmanager" ] && [ -n "$DEPLOYMENT_ID" ]; then
   # Secrets Manager strategy: parameters go to SM, Lambda gets secret name
-  # One secret per deployment for immutability
+  # One secret per deployment for immutability (requires a deployment ID)
   SECRETS_MANAGER_SECRET_NAME="nullplatform/${SCOPE_ID}/${DEPLOYMENT_ID}/parameters"
   AWS_ACCOUNT_ID=$(echo "$CONTEXT" | jq -r '.providers["cloud-providers"].credentials.account_id // ""')
 
