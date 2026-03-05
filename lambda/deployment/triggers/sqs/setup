@@ -15,21 +15,14 @@ fi
 
 log debug "   ✅ sqs_queue_count=$queue_count"
 
-# Determine enabled state:
-# - scope create (no DEPLOYMENT_ID) → disabled (Lambda not ready yet)
-# - deployment (DEPLOYMENT_ID set)  → enabled
-if [ -n "${DEPLOYMENT_ID:-}" ] && [ "${DEPLOYMENT_ID}" != "null" ]; then
-  sqs_enabled="true"
-  log debug "   ✅ sqs_enabled=true (deployment flow)"
-else
-  sqs_enabled="false"
-  log debug "   ✅ sqs_enabled=false (scope create flow)"
-fi
-
+# sqs_enabled: true when DEPLOYMENT_ID is set (deployment flow), false during scope create
 TOFU_VARIABLES=$(echo "$TOFU_VARIABLES" | jq \
   --argjson queue_arns "$queue_arns" \
-  --argjson sqs_enabled "$sqs_enabled" \
-  '. + {sqs_queue_arns: $queue_arns, sqs_enabled: $sqs_enabled}')
+  --arg deployment_id "${DEPLOYMENT_ID:-null}" \
+  '. + {sqs_queue_arns: $queue_arns, sqs_enabled: ($deployment_id != "" and $deployment_id != "null")}')
+
+sqs_enabled=$(echo "$TOFU_VARIABLES" | jq -r '.sqs_enabled')
+log debug "   ✅ sqs_enabled=$sqs_enabled (deployment_id=${DEPLOYMENT_ID:-<unset>})"
 
 echo ""
 log info "✨ SQS triggers configured ($queue_count queue(s), enabled=$sqs_enabled)"
