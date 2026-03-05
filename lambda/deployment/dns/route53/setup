@@ -8,6 +8,12 @@ log info "🔍 Validating Route53 DNS configuration..."
 # For private/internal scopes, prefer hosted_zone_id if available; fall back to public zone.
 visibility=$(echo "$CONTEXT" | jq -r '.scope.capabilities.visibility // "public"')
 
+# Skip DNS entirely for event-driven scopes (no HTTP networking needed)
+if [ "$visibility" = "event-driven" ]; then
+  log info "   ⏭️  Skipping Route53 DNS - visibility is 'event-driven' (no HTTP networking)"
+  return 0
+fi
+
 if [ "$visibility" = "private" ] || [ "$visibility" = "internal" ]; then
   hosted_zone_id=$(echo "$CONTEXT" | jq -r '.providers["cloud-providers"].networking.hosted_zone_id // empty')
   if [ -n "$hosted_zone_id" ] && [ "$hosted_zone_id" != "null" ]; then
