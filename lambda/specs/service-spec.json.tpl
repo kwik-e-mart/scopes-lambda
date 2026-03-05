@@ -13,8 +13,7 @@
         "layers",
         "vpc_enabled",
         "reserved_concurrency",
-        "provisioned_concurrency",
-        "triggers"
+        "provisioned_concurrency"
       ],
       "uiSchema": {
         "type": "VerticalLayout",
@@ -340,12 +339,15 @@
             "sqs": {
               "type": "object",
               "title": "SQS",
+              "description": "Configure SQS event source mappings for this function",
               "properties": {
                 "queue_arns": {
                   "type": "array",
                   "title": "SQS Queue ARNs",
                   "description": "ARNs of SQS queues that will trigger this function. Changes take effect on next deployment.",
-                  "items": { "type": "string" },
+                  "items": {
+                    "type": "string"
+                  },
                   "default": []
                 }
               }
