@@ -39,8 +39,8 @@ log debug "   ✅ application=$APPLICATION_SLUG"
 log debug "   ✅ scope=$SCOPE_SLUG"
 
 # Generate Lambda function name (max 64 chars)
-# Format: {namespace}-{application}-{scope}-{scope_id}
-LAMBDA_FUNCTION_NAME="${NAMESPACE_SLUG}-${APPLICATION_SLUG}-${SCOPE_SLUG}-${SCOPE_ID}"
+# Format: {scope_id}-{application}-{scope}
+LAMBDA_FUNCTION_NAME="${SCOPE_ID}-${APPLICATION_SLUG}-${SCOPE_SLUG}"
 LAMBDA_FUNCTION_NAME="${LAMBDA_FUNCTION_NAME:0:64}"
 log debug "   ✅ function_name=$LAMBDA_FUNCTION_NAME"
 
