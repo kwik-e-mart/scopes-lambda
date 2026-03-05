@@ -1,0 +1,49 @@
+#!/bin/bash
+
+source "$SERVICE_PATH/utils/log"
+
+log info "🔍 Validating SQS trigger configuration..."
+
+# Read queue ARNs from capabilities
+queue_arns=$(echo "$CONTEXT" | jq -r '.scope.capabilities.triggers.sqs.queue_arns // []')
+queue_count=$(echo "$queue_arns" | jq 'length')
+
+if [ "$queue_count" -eq 0 ]; then
+  log info "   ⏭️  Skipping SQS triggers - no queue ARNs configured"
+  return 0
+fi
+
+log debug "   ✅ sqs_queue_count=$queue_count"
+
+# Determine enabled state:
+# - scope create (no DEPLOYMENT_ID) → disabled (Lambda not ready yet)
+# - deployment (DEPLOYMENT_ID set)  → enabled
+if [ -n "${DEPLOYMENT_ID:-}" ] && [ "${DEPLOYMENT_ID}" != "null" ]; then
+  sqs_enabled="true"
+  log debug "   ✅ sqs_enabled=true (deployment flow)"
+else
+  sqs_enabled="false"
+  log debug "   ✅ sqs_enabled=false (scope create flow)"
+fi
+
+TOFU_VARIABLES=$(echo "$TOFU_VARIABLES" | jq \
+  --argjson queue_arns "$queue_arns" \
+  --argjson sqs_enabled "$sqs_enabled" \
+  '. + {sqs_queue_arns: $queue_arns, sqs_enabled: $sqs_enabled}')
+
+echo ""
+log info "✨ SQS triggers configured ($queue_count queue(s), enabled=$sqs_enabled)"
+echo ""
+
+# Add module to composition list
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+module_name="${script_dir}/modules"
+
+if [[ -n ${MODULES_TO_USE:-} ]]; then
+  MODULES_TO_USE="$MODULES_TO_USE,$module_name"
+else
+  MODULES_TO_USE="$module_name"
+fi
+
+export TOFU_VARIABLES
+export MODULES_TO_USE
