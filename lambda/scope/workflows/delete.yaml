@@ -11,15 +11,15 @@ steps:
         type: environment
       - name: LAMBDA_FUNCTION_NAME
         type: environment
+  - name: delete_sqs_triggers
+    type: script
+    file: "$SERVICE_PATH/scope/scripts/delete_sqs_triggers"
   - name: delete_lambda
     type: script
     file: "$SERVICE_PATH/scope/scripts/delete_lambda"
   - name: delete_sm_secrets
     type: script
     file: "$SERVICE_PATH/scope/scripts/delete_sm_secret"
-  - name: delete_sqs_triggers
-    type: script
-    file: "$SERVICE_PATH/scope/scripts/delete_sqs_triggers"
   - name: delete_iam_role
     type: script
     file: "$SERVICE_PATH/scope/scripts/delete_iam_role"
