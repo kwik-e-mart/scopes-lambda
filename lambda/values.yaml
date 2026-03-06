@@ -51,14 +51,14 @@ configuration:
   API_GATEWAY_THROTTLING_BURST_LIMIT: 5000
   API_GATEWAY_THROTTLING_RATE_LIMIT: 10000
 
-  # TODO: Remove these 2 values
   # ACM certificate ARN for API Gateway custom domain (required for HTTPS on custom domains)
-  CERTIFICATE_ARN: "arn:aws:acm:us-east-1:688720756067:certificate/2dd64edf-e000-46cf-b38c-3bd4fca36522"
-  ALB_LISTENER_ARN: "arn:aws:elasticloadbalancing:us-east-1:688720756067:listener/app/null-main-balancer/7776a3ca064c0c9d/231f2aff2a15344a"
+  CERTIFICATE_ARN: ""
+
+  # ALB Listener ARNs — selected by scope visibility
+  # ALB_PUBLIC_LISTENER_ARN: ""   # Listener for public (internet-facing) scopes
+  # ALB_PRIVATE_LISTENER_ARN: ""  # Listener for private (internal) scopes
 
   # ALB Settings (for private visibility)
-  # ALB_LISTENER_ARN: ""
-  # ALB_LISTENER_RULE_PRIORITY_START: 100
   ALB_LISTENER_RULE_CAPACITY: 300
   ALB_LISTENER_RULE_ALERT_THRESHOLD: 80
 

@@ -15,21 +15,25 @@ fi
 alb_listener_arn=$(echo "$CONTEXT" | jq -r '.providers["cloud-providers"].alb.listener_arn // empty')
 
 if [ -z "$alb_listener_arn" ] || [ "$alb_listener_arn" = "null" ]; then
-  # Try environment variable as fallback
-  alb_listener_arn="${ALB_LISTENER_ARN:-}"
+  # Fall back to visibility-specific env var, then legacy single-ARN var
+  if [ "$visibility" = "private" ]; then
+    alb_listener_arn="${ALB_PRIVATE_LISTENER_ARN:-${ALB_LISTENER_ARN:-}}"
+  else
+    alb_listener_arn="${ALB_PUBLIC_LISTENER_ARN:-${ALB_LISTENER_ARN:-}}"
+  fi
 fi
 
 if [ -z "$alb_listener_arn" ]; then
   echo ""
-  echo "   ❌ ALB listener ARN not found" >&2
+  echo "   ❌ ALB listener ARN not found for visibility '$visibility'" >&2
   echo "" >&2
   echo "  💡 Possible causes:" >&2
   echo "    • ALB listener ARN not configured in cloud-provider" >&2
-  echo "    • ALB_LISTENER_ARN environment variable not set" >&2
+  echo "    • ALB_PUBLIC_LISTENER_ARN / ALB_PRIVATE_LISTENER_ARN not set in Helm values" >&2
   echo "" >&2
   echo "  🔧 How to fix:" >&2
   echo "    • Configure alb.listener_arn in the cloud-provider settings" >&2
-  echo "    • Or set ALB_LISTENER_ARN environment variable in Helm values" >&2
+  echo "    • Or set ALB_PUBLIC_LISTENER_ARN / ALB_PRIVATE_LISTENER_ARN in Helm values" >&2
   echo "" >&2
   return 1
 fi
