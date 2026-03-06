@@ -58,7 +58,7 @@ configuration:
   # ALB_PUBLIC_LISTENER_ARN: ""   # Listener for public (internet-facing) scopes
   # ALB_PRIVATE_LISTENER_ARN: ""  # Listener for private (internal) scopes
 
-  # ALB Settings (for private visibility)
+  # ALB Settings
   ALB_LISTENER_RULE_CAPACITY: 300
   ALB_LISTENER_RULE_ALERT_THRESHOLD: 80
 
