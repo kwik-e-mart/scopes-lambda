@@ -4,47 +4,39 @@ source "$SERVICE_PATH/utils/log"
 
 log info "🔍 Configuring IAM role for deployment..."
 
-# If LAMBDA_ROLE_ARN is already set (e.g. exported by create_iam_role during scope create),
-# use it directly. Otherwise derive role name from LAMBDA_FUNCTION_NAME and look up in AWS.
-role_arn="${LAMBDA_ROLE_ARN:-}"
+iam_role_name="${LAMBDA_FUNCTION_NAME}-role"
+iam_role_name="${iam_role_name:0:64}"
 
-if [ -z "$role_arn" ] || [ "$role_arn" = "null" ]; then
-  role_name="${LAMBDA_FUNCTION_NAME}-role"
-  role_name="${role_name:0:64}"
-  log debug "   ✅ role_name=$role_name (lookup)"
+log debug "   📋 role_name=$iam_role_name"
 
-  role_output=$(aws iam get-role --role-name "$role_name" 2>&1)
-  role_exit=$?
+role_output=$(aws iam get-role --role-name "$iam_role_name" 2>&1)
 
-  if [ $role_exit -ne 0 ]; then
-    echo ""
-    echo "   ❌ IAM role '$role_name' not found" >&2
-    echo "" >&2
-    echo "  💡 Possible causes:" >&2
-    echo "    • Scope was not created via the standard create workflow" >&2
-    echo "    • create_iam_role script failed during scope creation" >&2
-    echo "" >&2
-    echo "  🔧 How to fix:" >&2
-    echo "    • Re-run the scope create workflow to provision the IAM role" >&2
-    echo "    • AWS error: $role_output" >&2
-    echo "" >&2
-    return 1
-  fi
-
+if [ $? -eq 0 ]; then
+  # Role exists — pass ARN to Tofu, no creation needed
   role_arn=$(echo "$role_output" | jq -r '.Role.Arn')
+  log debug "   ✅ role_arn=$role_arn (existing)"
+
+  TOFU_VARIABLES=$(echo "$TOFU_VARIABLES" | jq \
+    --arg role_arn "$role_arn" \
+    --arg role_name "$iam_role_name" \
+    '. + {lambda_role_arn: $role_arn, iam_create_role: false, iam_role_name: $role_name, iam_propagation_duration: "0s"}')
+else
+  # Role does not exist — Tofu will create it with propagation wait
+  propagation_wait="${IAM_PROPAGATION_WAIT_SECONDS:-20}"
+  propagation_duration="${propagation_wait}s"
+  log debug "   📋 role will be created by Tofu (propagation_wait=${propagation_duration})"
+
+  TOFU_VARIABLES=$(echo "$TOFU_VARIABLES" | jq \
+    --arg role_name "$iam_role_name" \
+    --arg scope_id "$SCOPE_ID" \
+    --arg duration "$propagation_duration" \
+    '. + {iam_create_role: true, iam_role_name: $role_name, iam_scope_id: $scope_id, iam_propagation_duration: $duration}')
 fi
 
-log debug "   ✅ role_arn=$role_arn"
-
-TOFU_VARIABLES=$(echo "$TOFU_VARIABLES" | jq \
-  --arg role_arn "$role_arn" \
-  '. + {lambda_role_arn: $role_arn, iam_create_role: false}')
-
-echo ""
-log info "✨ IAM configured (role_arn=$role_arn)"
+log info "✨ IAM configured"
 echo ""
 
-# Add module to composition list (needed for cross-module lambda_role_arn local)
+# Add module to composition list
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 module_name="${script_dir}/modules"
 

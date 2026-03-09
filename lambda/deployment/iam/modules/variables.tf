@@ -54,3 +54,15 @@ variable "iam_package_type" {
   type        = string
   default     = "Zip"
 }
+
+variable "iam_propagation_duration" {
+  description = "How long to wait after IAM role creation for global propagation (e.g. '20s'). Only fires on initial role creation."
+  type        = string
+  default     = "0s"
+}
+
+variable "iam_scope_id" {
+  description = "Scope ID used to scope the Secrets Manager wildcard policy when creating the role"
+  type        = string
+  default     = ""
+}
