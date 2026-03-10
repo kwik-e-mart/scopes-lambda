@@ -9,19 +9,17 @@ log info "📝 Running tofu $TOFU_ACTION for deployment: $DEPLOYMENT_ID"
 log debug "📋 Lambda function: $LAMBDA_FUNCTION_NAME"
 log debug "📋 Working directory: $TF_WORKING_DIR"
 
-# Verify tofu is installed
-if ! command -v tofu &> /dev/null; then
-  echo ""
-  echo "❌ OpenTofu (tofu) is not installed or not found in PATH" >&2
+# Verify tofu is available — either directly or via mise
+if command -v mise &> /dev/null; then
+  log debug "   🔧 mise detected — ensuring tofu is installed..."
+  mise install --quiet 2>/dev/null || true
+  tofu() { mise exec -- tofu "$@"; }
+elif ! command -v tofu &> /dev/null; then
   echo "" >&2
-  echo "💡 Possible causes:" >&2
-  echo "   - The agent container image does not include the tofu binary" >&2
-  echo "   - PATH does not include the tofu installation directory" >&2
+  echo "❌ Neither mise nor OpenTofu (tofu) found in PATH" >&2
   echo "" >&2
-  echo "🔧 How to fix:" >&2
-  echo "   - Add OpenTofu to the agent container image" >&2
-  echo "   - Installation guide: https://opentofu.org/docs/intro/install/" >&2
-  echo "   - Verify with: which tofu" >&2
+  echo "💡 Install mise (recommended): https://mise.jdx.dev" >&2
+  echo "   Or install tofu directly:   https://opentofu.org/docs/intro/install/" >&2
   echo "" >&2
   return 1
 fi
