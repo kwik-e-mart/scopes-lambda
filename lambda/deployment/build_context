@@ -126,8 +126,15 @@ if [ -n "$LAMBDA_BLUE_VERSION" ]; then
   log debug "   ✅ blue_version[$BLUE_DEPLOYMENT_ID]=$LAMBDA_BLUE_VERSION"
 fi
 
-# Get visibility to determine networking layer
-VISIBILITY=$(echo "$CONTEXT" | jq -r '.scope.capabilities.visibility // "public"')
+# Get visibility to determine networking layer.
+# The service spec has two fields: event_driven (boolean) and visibility (public/private).
+# Downstream scripts expect VISIBILITY to be "public", "private", or "event-driven".
+_event_driven=$(echo "$CONTEXT" | jq -r '.scope.capabilities.event_driven // false')
+if [ "$_event_driven" = "true" ]; then
+  VISIBILITY="event-driven"
+else
+  VISIBILITY=$(echo "$CONTEXT" | jq -r '.scope.capabilities.visibility // "public"')
+fi
 log debug "   ✅ visibility=$VISIBILITY"
 
 log debug "   ✅ strategy=$DEPLOYMENT_STRATEGY"
