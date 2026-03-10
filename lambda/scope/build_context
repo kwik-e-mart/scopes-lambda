@@ -52,10 +52,10 @@ LAMBDA_FUNCTION_NAME="${LAMBDA_FUNCTION_NAME:0:64}"
 echo "   ✅ function_name=$LAMBDA_FUNCTION_NAME"
 
 #Visibility
-# The service spec has two fields: event_driven (boolean) and visibility (public/private).
+# The service spec has two fields: http_enabled (boolean) and visibility (public/private).
 # Downstream scripts expect VISIBILITY to be "public", "private", or "event-driven".
-_event_driven=$(echo "$CONTEXT" | jq -r '.scope.capabilities.event_driven // false')
-if [ "$_event_driven" = "true" ]; then
+_http_enabled=$(echo "$CONTEXT" | jq -r '.scope.capabilities.http_enabled // true')
+if [ "$_http_enabled" = "false" ]; then
   VISIBILITY="event-driven"
 else
   VISIBILITY=$(echo "$CONTEXT" | jq -r '.scope.capabilities.visibility // "public"')

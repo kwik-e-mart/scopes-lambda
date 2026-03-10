@@ -8,7 +8,7 @@
         "memory",
         "timeout",
         "architecture",
-        "event_driven",
+        "http_enabled",
         "visibility",
         "continuous_delivery",
         "ephemeral_storage",
@@ -32,16 +32,16 @@
           },
           {
             "type": "Control",
-            "label": "Event-Driven",
-            "scope": "#/properties/event_driven"
+            "label": "Expose via HTTP",
+            "scope": "#/properties/http_enabled"
           },
           {
             "rule": {
               "effect": "SHOW",
               "condition": {
-                "scope": "#/properties/event_driven",
+                "scope": "#/properties/http_enabled",
                 "schema": {
-                  "const": false
+                  "const": true
                 }
               }
             },
@@ -246,11 +246,11 @@
             { "const": "x86_64", "title": "x86_64" }
           ]
         },
-        "event_driven": {
+        "http_enabled": {
           "type": "boolean",
-          "title": "Event-Driven",
-          "description": "When enabled, your function won't have an HTTP endpoint — it's triggered by events (queues, streams, schedules, etc.)",
-          "default": false
+          "title": "Expose via HTTP",
+          "description": "When enabled, your function is accessible via an HTTP endpoint. Disable this for functions triggered exclusively by internal events (queues, streams, schedules, etc.).",
+          "default": true
         },
         "visibility": {
           "type": "string",
