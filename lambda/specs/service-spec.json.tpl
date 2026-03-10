@@ -4,9 +4,11 @@
     "schema": {
       "type": "object",
       "required": [
+        "handler",
         "memory",
         "timeout",
         "architecture",
+        "http_enabled",
         "visibility",
         "continuous_delivery",
         "ephemeral_storage",
@@ -20,10 +22,29 @@
         "elements": [
           {
             "type": "Control",
+            "label": "Handler",
+            "scope": "#/properties/handler"
+          },
+          {
+            "type": "Control",
             "label": "Memory",
             "scope": "#/properties/memory"
           },
           {
+            "type": "Control",
+            "label": "Expose via HTTP",
+            "scope": "#/properties/http_enabled"
+          },
+          {
+            "rule": {
+              "effect": "SHOW",
+              "condition": {
+                "scope": "#/properties/http_enabled",
+                "schema": {
+                  "const": true
+                }
+              }
+            },
             "type": "Control",
             "label": "Visibility",
             "scope": "#/properties/visibility"
@@ -159,7 +180,13 @@
         "asset_type": {
           "type": "string",
           "export": false,
-          "default": "lambda-package"
+          "default": "docker-image"
+        },
+        "handler": {
+          "type": "string",
+          "title": "Handler",
+          "default": "index.handler",
+          "description": "Function entry point (e.g., index.handler for Node.js, app.lambda_handler for Python)"
         },
         "memory": {
           "type": "integer",
@@ -219,15 +246,20 @@
             { "const": "x86_64", "title": "x86_64" }
           ]
         },
+        "http_enabled": {
+          "type": "boolean",
+          "title": "Expose via HTTP",
+          "description": "When enabled, your function is accessible via an HTTP endpoint. Disable this for functions triggered exclusively by internal events (queues, streams, schedules, etc.).",
+          "default": true
+        },
         "visibility": {
           "type": "string",
           "title": "Visibility",
-          "description": "How your function is accessed (public, private, event-driven)",
+          "description": "How your function is accessed",
           "default": "public",
           "oneOf": [
             { "const": "public", "title": "Public" },
-            { "const": "private", "title": "Private" },
-            { "const": "event-driven", "title": "Event-Driven (no HTTP)" }
+            { "const": "private", "title": "Private" }
           ]
         },
         "reserved_concurrency": {
@@ -237,7 +269,7 @@
             "type": {
               "type": "string",
               "title": "Reserved Concurrency",
-              "description": "Guarantee execution capacity for this function",
+              "description": "Sets a hard limit on how many concurrent executions your function can have, throttling any requests beyond that number.",
               "default": "unreserved",
               "oneOf": [
                 { "const": "unreserved", "title": "Unreserved (shared pool)" },
@@ -261,7 +293,7 @@
             "type": {
               "type": "string",
               "title": "Provisioned Concurrency",
-              "description": "Keep instances warm to eliminate cold starts",
+              "description": "Pre-warms a fixed number of execution environments so they're always ready to respond instantly, eliminating cold starts — but you're billed for those instances continuously, even when idle.",
               "default": "unprovisioned",
               "oneOf": [
                 { "const": "unprovisioned", "title": "Disabled (cold starts allowed)" },
