@@ -74,6 +74,10 @@ configuration:
   #   AWS_LAMBDA_DEDICATED_ROLE_ENTITY: "scope" or "deployment"
 
   # Parameters Strategy: "env" (Lambda env vars) or "secretsmanager" (AWS Secrets Manager)
+  # IAM role propagation wait — seconds to sleep after creating a new IAM role before
+  # creating the Lambda function. Prevents "cannot assume role" errors during first deploy.
+  IAM_PROPAGATION_WAIT_SECONDS: 20
+
   PARAMETERS_STRATEGY: "secretsmanager"
 
   # Placeholder Lambda container image (created once via lambda/scope/placeholder/publish)

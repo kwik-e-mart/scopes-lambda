@@ -31,20 +31,10 @@ steps:
         type: environment
       - name: RESOURCE_TAGS_JSON
         type: environment
-  - name: create_iam_role
+  - name: resolve_placeholder_image
     type: script
-    file: "$SERVICE_PATH/scope/scripts/create_iam_role"
+    file: "$SERVICE_PATH/scope/scripts/resolve_placeholder_image"
     output:
-      - name: LAMBDA_ROLE_ARN
-        type: environment
-      - name: LAMBDA_ROLE_NAME
-        type: environment
-  - name: create_placeholder_lambda
-    type: script
-    file: "$SERVICE_PATH/scope/scripts/create_placeholder_lambda"
-    output:
-      - name: LAMBDA_FUNCTION_ARN
-        type: environment
       - name: IMAGE_URI
         type: environment
   - name: build_deployment_context
@@ -125,27 +115,6 @@ steps:
         type: environment
       - name: MODULES_TO_USE
         type: environment
-  - name: setup_networking
-    type: workflow
-    steps:
-      - name: setup_api_gateway
-        type: script
-        file: "$SERVICE_PATH/deployment/networking/api_gateway/setup"
-        output:
-          - name: TOFU_VARIABLES
-            type: environment
-          - name: MODULES_TO_USE
-            type: environment
-      - name: setup_alb
-        type: script
-        file: "$SERVICE_PATH/deployment/networking/alb/setup"
-        output:
-          - name: TOFU_VARIABLES
-            type: environment
-          - name: MODULES_TO_USE
-            type: environment
-          - name: ALB_RULE_PRIORITY
-            type: environment
   - name: compose_modules
     type: script
     file: "$SERVICE_PATH/deployment/compose_modules"
