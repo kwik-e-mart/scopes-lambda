@@ -121,8 +121,6 @@ if [ "$TOFU_ACTION" = "apply" ]; then
   if [ "$outputs" != "{}" ]; then
     LAMBDA_FUNCTION_ARN=$(echo "$outputs" | jq -r '.lambda_function_arn.value // empty')
     LAMBDA_CURRENT_VERSION=$(echo "$outputs" | jq -r '.lambda_current_version.value // empty')
-    API_GATEWAY_ID=$(echo "$outputs" | jq -r '.api_gateway_id.value // empty')
-    API_GATEWAY_ENDPOINT=$(echo "$outputs" | jq -r '.api_gateway_endpoint.value // empty')
 
     if [ -n "$LAMBDA_FUNCTION_ARN" ]; then
       log debug "   ✅ function_arn=$LAMBDA_FUNCTION_ARN"
@@ -132,16 +130,6 @@ if [ "$TOFU_ACTION" = "apply" ]; then
     if [ -n "$LAMBDA_CURRENT_VERSION" ]; then
       log debug "   ✅ version=$LAMBDA_CURRENT_VERSION"
       export LAMBDA_CURRENT_VERSION
-    fi
-
-    if [ -n "$API_GATEWAY_ID" ]; then
-      log debug "   ✅ api_gateway_id=$API_GATEWAY_ID"
-      export API_GATEWAY_ID
-    fi
-
-    if [ -n "$API_GATEWAY_ENDPOINT" ]; then
-      log debug "   ✅ api_gateway_endpoint=$API_GATEWAY_ENDPOINT"
-      export API_GATEWAY_ENDPOINT
     fi
 
     ALB_RULE_ARN=$(echo "$outputs" | jq -r '.alb_listener_rule_arn.value // empty')

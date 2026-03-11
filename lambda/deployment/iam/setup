@@ -12,26 +12,23 @@ log debug "   📋 role_name=$iam_role_name"
 role_output=$(aws iam get-role --role-name "$iam_role_name" 2>&1)
 
 if [ $? -eq 0 ]; then
-  # Role exists — pass ARN to Tofu, no creation needed
-  role_arn=$(echo "$role_output" | jq -r '.Role.Arn')
-  log debug "   ✅ role_arn=$role_arn (existing)"
-
-  TOFU_VARIABLES=$(echo "$TOFU_VARIABLES" | jq \
-    --arg role_arn "$role_arn" \
-    --arg role_name "$iam_role_name" \
-    '. + {lambda_role_arn: $role_arn, iam_create_role: false, iam_role_name: $role_name, iam_propagation_duration: "0s"}')
+  # Role already exists — Tofu will manage it (no changes expected) but skip propagation wait.
+  # iam_create_role must stay true so count=1 is preserved in the Terraform state;
+  # setting it to false would flip count to 0 and cause Terraform to destroy the role.
+  log debug "   ✅ role exists (no propagation wait needed)"
+  propagation_duration="0s"
 else
-  # Role does not exist — Tofu will create it with propagation wait
+  # Role does not exist — Tofu will create it and wait for IAM propagation.
   propagation_wait="${IAM_PROPAGATION_WAIT_SECONDS:-20}"
   propagation_duration="${propagation_wait}s"
   log debug "   📋 role will be created by Tofu (propagation_wait=${propagation_duration})"
-
-  TOFU_VARIABLES=$(echo "$TOFU_VARIABLES" | jq \
-    --arg role_name "$iam_role_name" \
-    --arg scope_id "$SCOPE_ID" \
-    --arg duration "$propagation_duration" \
-    '. + {iam_create_role: true, iam_role_name: $role_name, iam_scope_id: $scope_id, iam_propagation_duration: $duration}')
 fi
+
+TOFU_VARIABLES=$(echo "$TOFU_VARIABLES" | jq \
+  --arg role_name "$iam_role_name" \
+  --arg scope_id "$SCOPE_ID" \
+  --arg duration "$propagation_duration" \
+  '. + {iam_create_role: true, iam_role_name: $role_name, iam_scope_id: $scope_id, iam_propagation_duration: $duration}')
 
 log info "✨ IAM configured"
 echo ""

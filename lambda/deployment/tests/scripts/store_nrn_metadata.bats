@@ -162,7 +162,6 @@ OUTERSCRIPT
   export LAMBDA_NEW_VERSION="6"
   export LAMBDA_ALIAS_NAME="main"
   export LAMBDA_ROLE_ARN="arn:aws:iam::123456789012:role/my-role"
-  export API_GATEWAY_ID="abc123"
   export SCOPE_DOMAIN="api.example.com"
 
   create_np_mock '{"ok": true}'
@@ -176,7 +175,6 @@ OUTERSCRIPT
   assert_output_contains "new_version=6"
   assert_output_contains "main_alias=main"
   assert_output_contains "role_arn=arn:aws:iam::123456789012:role/my-role"
-  assert_output_contains "api_gateway_id=abc123"
   assert_output_contains "scope_domain=api.example.com"
 }
 
