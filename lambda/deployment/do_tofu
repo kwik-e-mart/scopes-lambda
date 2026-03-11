@@ -12,7 +12,7 @@ log debug "📋 Working directory: $TF_WORKING_DIR"
 # Verify tofu is available — either directly or via mise
 if command -v mise &> /dev/null; then
   log debug "   🔧 mise detected — ensuring tofu is installed..."
-  mise install --quiet 2>/dev/null || true
+  mise install -y 2>&1 | while IFS= read -r line; do log debug "   [mise] $line"; done || true
   tofu() { mise exec -- tofu "$@"; }
 elif ! command -v tofu &> /dev/null; then
   echo "" >&2
