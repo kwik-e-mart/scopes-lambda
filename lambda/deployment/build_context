@@ -51,10 +51,6 @@ DESIRED_TRAFFIC=$(echo "$CONTEXT" | jq -r '.deployment.strategy_data.desired_swi
 echo ""
 log info "📋 Scope: $SCOPE_ID | Deployment: $DEPLOYMENT_ID | Strategy: $DEPLOYMENT_STRATEGY"
 
-# Read existing Lambda metadata from NRN (if exists)
-echo ""
-log info "   📡 Reading Lambda metadata from NRN..."
-
 # Preserve function ARN that may already be set by upstream steps (e.g. scope create)
 _env_function_arn="${LAMBDA_FUNCTION_ARN:-}"
 
@@ -64,35 +60,19 @@ LAMBDA_GREEN_VERSION=""
 LAMBDA_BLUE_VERSION=""
 LAMBDA_MAIN_ALIAS_NAME="${LAMBDA_MAIN_ALIAS_NAME:-main}"
 
-# Determine deployment IDs before NRN read so we can fetch per-deployment versions
+# Determine deployment IDs before version lookup
 BLUE_DEPLOYMENT_ID=$(echo "$CONTEXT" | jq -r '.scope.current_active_deployment // ""')
 
-nrn_ids="lambda.lambda_function_arn,lambda.lambda_function_main_alias,lambda.lambda_current_reserved_concurrency_type,lambda.lambda_current_reserved_concurrency_value,lambda.lambda_current_provisioned_concurrency_type,lambda.lambda_current_provisioned_concurrency_value"
-
-nrn_output=$(np nrn read --nrn "$SCOPE_NRN" --ids "$nrn_ids" --format json 2>&1 || echo "{}")
-
-if [ "$nrn_output" != "{}" ]; then
-  LAMBDA_FUNCTION_ARN=$(echo "$nrn_output" | jq -r '.namespaces.lambda.lambda_function_arn // ""')
-  stored_alias=$(echo "$nrn_output" | jq -r '.namespaces.lambda.lambda_function_main_alias // ""')
-  if [ -n "$stored_alias" ] && [ "$stored_alias" != "null" ]; then
-    LAMBDA_MAIN_ALIAS_NAME="$stored_alias"
-  fi
-
-  # Read current concurrency state for rollback tracking
-  LAMBDA_CURRENT_RESERVED_CONCURRENCY_TYPE=$(echo "$nrn_output" | jq -r '.namespaces.lambda.lambda_current_reserved_concurrency_type // ""')
-  LAMBDA_CURRENT_RESERVED_CONCURRENCY_VALUE=$(echo "$nrn_output" | jq -r '.namespaces.lambda.lambda_current_reserved_concurrency_value // ""')
-  LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_TYPE=$(echo "$nrn_output" | jq -r '.namespaces.lambda.lambda_current_provisioned_concurrency_type // ""')
-  LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_VALUE=$(echo "$nrn_output" | jq -r '.namespaces.lambda.lambda_current_provisioned_concurrency_value // ""')
+# Look up function ARN directly from AWS (deterministic, no NRN needed)
+log info "   📡 Looking up existing Lambda function..."
+if lambda_info=$(aws lambda get-function --function-name "$LAMBDA_FUNCTION_NAME" --output json 2>/dev/null); then
+  LAMBDA_FUNCTION_ARN=$(echo "$lambda_info" | jq -r '.Configuration.FunctionArn // ""')
+  log debug "   ✅ Found existing Lambda: $LAMBDA_FUNCTION_ARN"
 else
-  LAMBDA_CURRENT_RESERVED_CONCURRENCY_TYPE=""
-  LAMBDA_CURRENT_RESERVED_CONCURRENCY_VALUE=""
-  LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_TYPE=""
-  LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_VALUE=""
+  # Function does not exist yet — initial deployment
+  LAMBDA_FUNCTION_ARN="${_env_function_arn}"
+  log debug "   ✅ No existing Lambda found (initial deployment)"
 fi
-
-# Fall back to env-provided value if NRN did not have it
-# (e.g. during scope create, NRN has no lambda.* keys yet)
-[ -z "$LAMBDA_FUNCTION_ARN" ] && LAMBDA_FUNCTION_ARN="$_env_function_arn"
 
 # Look up Lambda versions by deployment ID (each published version embeds the deployment ID as description)
 log info "   📡 Looking up Lambda versions by deployment ID..."
@@ -112,12 +92,6 @@ fi
 
 # LAMBDA_CURRENT_VERSION: set from green version or will be overwritten by do_tofu output
 LAMBDA_CURRENT_VERSION="$LAMBDA_GREEN_VERSION"
-
-if [ -n "$LAMBDA_FUNCTION_ARN" ] && [ "$LAMBDA_FUNCTION_ARN" != "null" ]; then
-  log debug "   ✅ Found existing Lambda: $LAMBDA_FUNCTION_ARN"
-else
-  log debug "   ✅ No existing Lambda found (initial deployment)"
-fi
 
 if [ -n "$LAMBDA_GREEN_VERSION" ]; then
   log debug "   ✅ green_version[$DEPLOYMENT_ID]=$LAMBDA_GREEN_VERSION"
@@ -464,10 +438,6 @@ TOFU_VARIABLES=$(jq -n \
   --arg provisioned_concurrency_type "$PROVISIONED_CONCURRENCY_TYPE" \
   --arg provisioned_concurrency_value "$PROVISIONED_CONCURRENCY_VALUE" \
   --arg warmup_alias_name "$WARMUP_ALIAS_NAME" \
-  --arg current_reserved_concurrency_type "$LAMBDA_CURRENT_RESERVED_CONCURRENCY_TYPE" \
-  --arg current_reserved_concurrency_value "$LAMBDA_CURRENT_RESERVED_CONCURRENCY_VALUE" \
-  --arg current_provisioned_concurrency_type "$LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_TYPE" \
-  --arg current_provisioned_concurrency_value "$LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_VALUE" \
   --arg vpc_enabled "$VPC_ENABLED" \
   --argjson subnet_ids "$SUBNET_IDS" \
   --argjson security_group_ids "$SECURITY_GROUP_IDS" \
@@ -508,10 +478,6 @@ TOFU_VARIABLES=$(jq -n \
     provisioned_concurrency_type: $provisioned_concurrency_type,
     provisioned_concurrency_value: ($provisioned_concurrency_value | tonumber),
     warmup_alias_name: $warmup_alias_name,
-    current_reserved_concurrency_type: $current_reserved_concurrency_type,
-    current_reserved_concurrency_value: $current_reserved_concurrency_value,
-    current_provisioned_concurrency_type: $current_provisioned_concurrency_type,
-    current_provisioned_concurrency_value: $current_provisioned_concurrency_value,
     vpc_enabled: ($vpc_enabled == "true"),
     subnet_ids: $subnet_ids,
     security_group_ids: $security_group_ids,
@@ -580,10 +546,6 @@ export RESERVED_CONCURRENCY_VALUE
 export PROVISIONED_CONCURRENCY_TYPE
 export PROVISIONED_CONCURRENCY_VALUE
 export WARMUP_ALIAS_NAME
-export LAMBDA_CURRENT_RESERVED_CONCURRENCY_TYPE
-export LAMBDA_CURRENT_RESERVED_CONCURRENCY_VALUE
-export LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_TYPE
-export LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_VALUE
 export VPC_ENABLED
 export SUBNET_IDS
 export SECURITY_GROUP_IDS
