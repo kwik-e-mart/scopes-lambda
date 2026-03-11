@@ -55,7 +55,7 @@ teardown() {
 }
 
 # Layer selection
-@test "deployment/build_context: selects api_gateway layer when visibility is public" {
+@test "deployment/build_context: resolves public visibility correctly" {
   set_context "public"
 
   local visibility

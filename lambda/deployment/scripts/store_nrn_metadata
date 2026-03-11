@@ -58,13 +58,6 @@ if [ -n "${LAMBDA_ROLE_ARN:-}" ]; then
   log debug "   ✅ role_arn=$LAMBDA_ROLE_ARN"
 fi
 
-if [ -n "${API_GATEWAY_ID:-}" ]; then
-  metadata=$(echo "$metadata" | jq \
-    --arg api "$API_GATEWAY_ID" \
-    '. + {apigateway_http_api_id: $api}')
-  log debug "   ✅ api_gateway_id=$API_GATEWAY_ID"
-fi
-
 if [ -n "${SCOPE_DOMAIN:-}" ]; then
   metadata=$(echo "$metadata" | jq \
     --arg domain "$SCOPE_DOMAIN" \
@@ -98,13 +91,6 @@ if [ -n "${LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_VALUE:-}" ]; then
     --arg val "$LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_VALUE" \
     '. + {lambda_current_provisioned_concurrency_value: $val}')
   log debug "   ✅ provisioned_concurrency_value=$LAMBDA_CURRENT_PROVISIONED_CONCURRENCY_VALUE"
-fi
-
-if [ -n "${APIGATEWAY_HTTP_API_SCOPE_MAPPING_ID:-}" ]; then
-  metadata=$(echo "$metadata" | jq \
-    --arg val "$APIGATEWAY_HTTP_API_SCOPE_MAPPING_ID" \
-    '. + {apigateway_http_api_scope_mapping_id: $val}')
-  log debug "   ✅ api_scope_mapping_id=$APIGATEWAY_HTTP_API_SCOPE_MAPPING_ID"
 fi
 
 if [ -n "${CURRENT_TARGET_GROUP_ARN:-}" ]; then
