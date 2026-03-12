@@ -6,12 +6,12 @@
 
 log info "🔑 Fetching scope configuration..."
 
-NRN=$(echo "$CONTEXT" | jq -r .entity_nrn)
+NRN=$(echo "$CONTEXT" | jq -r '.scope.nrn')
 log debug "   ✅ nrn=$NRN"
 
-DIMENSIONS=$(echo "$CONTEXT" | jq .service.dimensions)
-
-DIMENSION_FILTER=$(echo "$DIMENSIONS" | jq -r 'to_entries | map("\(.key):\(.value)") | join(",")')
+DIMENSION_FILTER=$(echo "$CONTEXT" | jq -r '
+  (.scope.dimensions // {}) | to_entries | map("\(.key):\(.value)") | join(",")
+')
 
 if [ -z "$DIMENSION_FILTER" ] || [ "$DIMENSION_FILTER" = "" ]; then
   log debug "   ✅ dimensions=none"
