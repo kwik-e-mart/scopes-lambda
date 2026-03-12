@@ -4,8 +4,8 @@
 
 echo "🔍 Generating scope domain..."
 
-# Get hosted zone ID from context
-hosted_zone_id=$(echo "$CONTEXT" | jq -r '.providers["cloud-providers"].networking.hosted_public_zone_id // empty')
+# Get hosted zone ID exported by fetch_scope_configuration
+hosted_zone_id="${HOSTED_PUBLIC_ZONE_ID:-}"
 
 if [ -z "$hosted_zone_id" ] || [ "$hosted_zone_id" = "null" ]; then
   echo "   ✅ No hosted_public_zone_id configured - skipping domain generation"
