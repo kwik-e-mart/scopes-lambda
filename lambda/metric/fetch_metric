@@ -23,13 +23,6 @@ end_time=$(date -u -d "@${_now}" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -r "
 start_time=$(date -u -d "@$(( _now - 3600 ))" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -r "$(( _now - 3600 ))" +%Y-%m-%dT%H:%M:%SZ)
 unset _now
 
-echo "Fetching metric: $metric_name"
-echo "   Function: $LAMBDA_FUNCTION_NAME"
-echo "   Period: ${period}s"
-echo "   Statistic: $statistic"
-echo "   Time range: $start_time to $end_time"
-echo ""
-
 # Fetch metric
 result=$(aws cloudwatch get-metric-statistics \
    --namespace AWS/Lambda \
