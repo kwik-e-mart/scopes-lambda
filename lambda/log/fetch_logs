@@ -56,4 +56,9 @@ if [ $? -ne 0 ]; then
    exit 1
 fi
 
-echo "$result"
+sorted_logs=$(echo "$result" | jq 'sort_by(.timestamp)')
+
+jq -n \
+   --argjson results "$sorted_logs" \
+   --arg token "" \
+   '{results: $results, next_page_token: $token}'
