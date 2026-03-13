@@ -15,6 +15,27 @@ echo '{
       "unit": "ms",
       "available_filters": ["scope_id"],
       "available_group_by": []
+    },
+    {
+      "name": "Errors",
+      "title": "Errors",
+      "unit": "count",
+      "available_filters": ["scope_id"],
+      "available_group_by": []
+    },
+    {
+      "name": "Throttles",
+      "title": "Throttles",
+      "unit": "count",
+      "available_filters": ["scope_id"],
+      "available_group_by": []
+    },
+    {
+      "name": "ConcurrentExecutions",
+      "title": "Concurrent executions",
+      "unit": "count",
+      "available_filters": ["scope_id"],
+      "available_group_by": []
     }
   ]
 }'
