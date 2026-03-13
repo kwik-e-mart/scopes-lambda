@@ -1,0 +1,15 @@
+#!/bin/bash
+# Derives the Lambda function name deterministically from CONTEXT.
+# Usage: source "$SERVICE_PATH/utils/lambda_function_name"
+# Requires: SCOPE_ID set, CONTEXT with .application.slug and .scope.slug
+# Exports:  LAMBDA_FUNCTION_NAME
+
+_application_slug=$(echo "$CONTEXT" | jq -r '.application.slug')
+_scope_slug=$(echo "$CONTEXT" | jq -r '.scope.slug')
+
+LAMBDA_FUNCTION_NAME="${SCOPE_ID}-${_application_slug}-${_scope_slug}"
+LAMBDA_FUNCTION_NAME="${LAMBDA_FUNCTION_NAME:0:64}"
+
+export LAMBDA_FUNCTION_NAME
+
+unset _application_slug _scope_slug

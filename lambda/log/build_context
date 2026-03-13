@@ -14,11 +14,7 @@ if [ -z "$SCOPE_ID" ] || [ "$SCOPE_ID" = "null" ]; then
    exit 1
 fi
 
-APPLICATION_SLUG=$(echo "$CONTEXT" | jq -r '.application.slug')
-SCOPE_SLUG=$(echo "$CONTEXT" | jq -r '.scope.slug')
-
-LAMBDA_FUNCTION_NAME="${SCOPE_ID}-${APPLICATION_SLUG}-${SCOPE_SLUG}"
-LAMBDA_FUNCTION_NAME="${LAMBDA_FUNCTION_NAME:0:64}"
+source "$SERVICE_PATH/utils/lambda_function_name"
 
 LOG_GROUP_NAME="/aws/lambda/$LAMBDA_FUNCTION_NAME"
 
