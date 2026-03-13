@@ -56,7 +56,7 @@ if [ $? -ne 0 ]; then
    exit 1
 fi
 
-sorted_logs=$(echo "$result" | jq 'sort_by(.datetime)')
+sorted_logs=$(echo "$result" | jq '[.[] | .datetime = ((.datetime / 1000) | todate)] | sort_by(.datetime)')
 
 jq -n \
    --argjson results "$sorted_logs" \
