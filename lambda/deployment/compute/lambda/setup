@@ -82,10 +82,10 @@ vpc_enabled=$(echo "$CONTEXT" | jq -r '.scope.capabilities.vpc_enabled // false'
 vpc_config="null"
 
 if [ "$vpc_enabled" = "true" ]; then
-  subnet_ids=$(echo "$CONTEXT" | jq -r '.providers["cloud-providers"].networking.subnet_ids // empty')
-  security_group_ids=$(echo "$CONTEXT" | jq -r '.providers["cloud-providers"].networking.security_group_ids // empty')
+  subnet_ids=$(echo "$TOFU_VARIABLES" | jq -c '.subnet_ids // []')
+  security_group_ids=$(echo "$TOFU_VARIABLES" | jq -c '.security_group_ids // []')
 
-  if [ -n "$subnet_ids" ] && [ -n "$security_group_ids" ]; then
+  if [ "$(echo "$subnet_ids" | jq 'length')" -gt 0 ] && [ "$(echo "$security_group_ids" | jq 'length')" -gt 0 ]; then
     vpc_config=$(jq -n \
       --argjson subnet_ids "$subnet_ids" \
       --argjson security_group_ids "$security_group_ids" \
@@ -96,7 +96,8 @@ if [ "$vpc_enabled" = "true" ]; then
     echo "   ❌ VPC enabled but subnet_ids or security_group_ids not configured" >&2
     echo "" >&2
     echo "  🔧 How to fix:" >&2
-    echo "    • Configure networking.subnet_ids and networking.security_group_ids in the cloud-provider" >&2
+    echo "    • Set networking.aws_subnet_ids (comma-separated) in the scope-configurations provider" >&2
+    echo "    • Set SECURITY_GROUP_IDS (comma-separated) in the scope values configuration" >&2
     echo "" >&2
     return 1
   fi

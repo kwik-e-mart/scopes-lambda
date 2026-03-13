@@ -1,4 +1,0 @@
-#!/bin/bash
-# No operation - placeholder for workflows that don't need to do anything
-echo "No operation required"
-exit 0

@@ -3,6 +3,7 @@
 # Source utility functions
 source "$SERVICE_PATH/utils/get_config_value"
 source "$SERVICE_PATH/utils/log"
+source "$SERVICE_PATH/utils/fetch_scope_configuration"
 
 log info "🔍 Building deployment context..."
 
@@ -127,7 +128,6 @@ echo ""
 log info "   🔑 Extracting provider credentials..."
 
 AWS_REGION=$(get_config_value \
-  --provider '.providers["cloud-providers"].credentials.region' \
   --env AWS_REGION \
   --default "us-east-1"
 )
@@ -151,28 +151,24 @@ log info "   ⚙️ Extracting Lambda configuration..."
 
 LAMBDA_MEMORY=$(get_config_value \
   --provider '.scope.capabilities.memory' \
-  --env DEFAULT_MEMORY \
   --default "256"
 )
 log debug "   ✅ memory=$LAMBDA_MEMORY"
 
 LAMBDA_TIMEOUT=$(get_config_value \
   --provider '.scope.capabilities.timeout' \
-  --env DEFAULT_TIMEOUT \
   --default "30"
 )
 log debug "   ✅ timeout=$LAMBDA_TIMEOUT"
 
 LAMBDA_ARCHITECTURE=$(get_config_value \
   --provider '.scope.capabilities.architecture' \
-  --env DEFAULT_ARCHITECTURE \
   --default "arm64"
 )
 log debug "   ✅ architecture=$LAMBDA_ARCHITECTURE"
 
 LAMBDA_EPHEMERAL_STORAGE=$(get_config_value \
   --provider '.scope.capabilities.ephemeral_storage' \
-  --env DEFAULT_EPHEMERAL_STORAGE \
   --default "512"
 )
 log debug "   ✅ ephemeral_storage=$LAMBDA_EPHEMERAL_STORAGE"
@@ -186,7 +182,6 @@ log info "   🔄 Extracting concurrency settings..."
 
 RESERVED_CONCURRENCY_TYPE=$(get_config_value \
   --provider '.scope.capabilities.reserved_concurrency.type' \
-  --env DEFAULT_RESERVED_CONCURRENCY_TYPE \
   --default "unreserved"
 )
 log debug "   ✅ reserved_concurrency_type=$RESERVED_CONCURRENCY_TYPE"
@@ -196,7 +191,6 @@ log debug "   ✅ reserved_concurrency_value=$RESERVED_CONCURRENCY_VALUE"
 
 PROVISIONED_CONCURRENCY_TYPE=$(get_config_value \
   --provider '.scope.capabilities.provisioned_concurrency.type' \
-  --env DEFAULT_PROVISIONED_CONCURRENCY_TYPE \
   --default "unprovisioned"
 )
 log debug "   ✅ provisioned_concurrency_type=$PROVISIONED_CONCURRENCY_TYPE"
@@ -218,10 +212,10 @@ log info "   🌐 Extracting VPC configuration..."
 VPC_ENABLED=$(echo "$CONTEXT" | jq -r '.scope.capabilities.vpc_enabled // false')
 log debug "   ✅ vpc_enabled=$VPC_ENABLED"
 
-SUBNET_IDS=$(echo "$CONTEXT" | jq -c '.providers["cloud-providers"].networking.subnet_ids // []')
+SUBNET_IDS=$(echo "${AWS_SUBNET_IDS:-}" | jq -Rc 'split(",") | map(select(length > 0))')
 log debug "   ✅ subnet_ids=$SUBNET_IDS"
 
-SECURITY_GROUP_IDS=$(echo "$CONTEXT" | jq -c '.providers["cloud-providers"].networking.security_group_ids // []')
+SECURITY_GROUP_IDS=$(echo "${SECURITY_GROUP_IDS:-}" | jq -Rc 'split(",") | map(select(length > 0))')
 log debug "   ✅ security_group_ids=$SECURITY_GROUP_IDS"
 
 # Extract asset info (S3 zip or ECR container image)
@@ -307,8 +301,6 @@ if [ "$PARAMETERS_STRATEGY" = "secretsmanager" ] && [ -n "$DEPLOYMENT_ID" ]; the
   # Secrets Manager strategy: parameters go to SM, Lambda gets secret name
   # One secret per deployment for immutability (requires a deployment ID)
   SECRETS_MANAGER_SECRET_NAME="nullplatform/${SCOPE_ID}/${DEPLOYMENT_ID}/parameters"
-  AWS_ACCOUNT_ID=$(echo "$CONTEXT" | jq -r '.providers["cloud-providers"].credentials.account_id // ""')
-
   if [ -n "$AWS_ACCOUNT_ID" ] && [ "$AWS_ACCOUNT_ID" != "null" ]; then
     SECRETS_MANAGER_SECRET_ARN="arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:${SECRETS_MANAGER_SECRET_NAME}"
   else
@@ -352,13 +344,10 @@ NULL_AGENT_LAYER_ARN=$(get_config_value \
 log debug "   ✅ null_agent_layer_arn=$NULL_AGENT_LAYER_ARN"
 
 if [ "$USE_NULL_AGENT" = "true" ]; then
-  NP_APIKEY=$(echo "$CONTEXT" | jq -r '.providers["cloud-providers"].credentials.np_apikey // ""')
-  if [ -z "$NP_APIKEY" ] || [ "$NP_APIKEY" = "null" ]; then
-    NP_APIKEY=$(get_config_value \
-      --env NULLPLATFORM_APIKEY \
-      --default ""
-    )
-  fi
+  NP_APIKEY=$(get_config_value \
+    --env NULLPLATFORM_APIKEY \
+    --default ""
+  )
 
   AWS_LAMBDA_EXEC_WRAPPER="/opt/nullplatform/launcher.sh"
 
