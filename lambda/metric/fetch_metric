@@ -54,4 +54,24 @@ if [ $? -ne 0 ]; then
    exit 1
 fi
 
-echo "$result"
+unit=$(echo "$result" | jq -r 'first | .Unit // ""')
+sorted_data=$(echo "$result" | jq --arg stat "$statistic" \
+   '[.[] | {datetime: .Timestamp, value: .[$stat]}] | sort_by(.datetime)')
+
+jq -n \
+   --arg metric "$metric_name" \
+   --arg type "$statistic" \
+   --argjson period "$period" \
+   --arg unit "$unit" \
+   --arg function_name "$LAMBDA_FUNCTION_NAME" \
+   --argjson data "$sorted_data" \
+   '{
+      metric: $metric,
+      type: $type,
+      period_in_seconds: $period,
+      unit: $unit,
+      results: [{
+         selector: {FunctionName: $function_name},
+         data: $data
+      }]
+   }'
