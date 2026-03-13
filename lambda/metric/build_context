@@ -16,6 +16,15 @@ fi
 
 source "$SERVICE_PATH/utils/lambda_function_name"
 
+METRIC_NAME=$(echo "$CONTEXT" | jq -r '.arguments.metric // "Invocations"')
+METRIC_PERIOD=$(echo "$CONTEXT" | jq -r '.arguments.period // 300')
+METRIC_START_TIME=$(echo "$CONTEXT" | jq -r '.arguments.start_time // ""')
+METRIC_END_TIME=$(echo "$CONTEXT" | jq -r '.arguments.end_time // ""')
+
 export SCOPE_ID
 export SCOPE_NRN
 export LAMBDA_FUNCTION_NAME
+export METRIC_NAME
+export METRIC_PERIOD
+export METRIC_START_TIME
+export METRIC_END_TIME

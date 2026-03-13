@@ -17,11 +17,16 @@ metric_name="${METRIC_NAME:-Invocations}"
 period="${METRIC_PERIOD:-300}"
 statistic="${METRIC_STATISTIC:-Sum}"
 
-# Calculate time range (default: last hour)
-_now=$(date +%s)
-end_time=$(date -u -d "@${_now}" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -r "${_now}" +%Y-%m-%dT%H:%M:%SZ)
-start_time=$(date -u -d "@$(( _now - 3600 ))" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -r "$(( _now - 3600 ))" +%Y-%m-%dT%H:%M:%SZ)
-unset _now
+# Use time range from context or fall back to last hour
+if [ -n "${METRIC_START_TIME:-}" ] && [ -n "${METRIC_END_TIME:-}" ]; then
+   start_time="$METRIC_START_TIME"
+   end_time="$METRIC_END_TIME"
+else
+   _now=$(date +%s)
+   end_time=$(date -u -d "@${_now}" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -r "${_now}" +%Y-%m-%dT%H:%M:%SZ)
+   start_time=$(date -u -d "@$(( _now - 3600 ))" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -r "$(( _now - 3600 ))" +%Y-%m-%dT%H:%M:%SZ)
+   unset _now
+fi
 
 # Fetch metric
 result=$(aws cloudwatch get-metric-statistics \
