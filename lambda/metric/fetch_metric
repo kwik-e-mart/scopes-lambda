@@ -49,7 +49,7 @@ fi
 
 unit=$(echo "$result" | jq -r 'first | .Unit // ""')
 sorted_data=$(echo "$result" | jq --arg stat "$statistic" \
-   '[.[] | {datetime: .Timestamp, value: .[$stat]}] | sort_by(.datetime)')
+   '[.[] | {timestamp: .Timestamp, value: .[$stat]}] | sort_by(.timestamp)')
 
 jq -n \
    --arg metric "$metric_name" \
