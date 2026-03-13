@@ -8,6 +8,13 @@ echo '{
       "unit": "count",
       "available_filters": ["scope_id"],
       "available_group_by": []
+    },
+    {
+      "name": "Duration",
+      "title": "Duration",
+      "unit": "ms",
+      "available_filters": ["scope_id"],
+      "available_group_by": []
     }
   ]
 }'
