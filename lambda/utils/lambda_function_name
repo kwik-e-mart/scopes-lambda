@@ -1,8 +1,8 @@
 #!/bin/bash
-# Derives the Lambda function name deterministically from CONTEXT.
+# Derives Lambda resource names deterministically from CONTEXT.
 # Usage: source "$SERVICE_PATH/utils/lambda_function_name"
 # Requires: SCOPE_ID set, CONTEXT with .application.slug and .scope.slug
-# Exports:  LAMBDA_FUNCTION_NAME
+# Exports:  LAMBDA_FUNCTION_NAME, LAMBDA_LOG_GROUP_NAME
 
 _application_slug=$(echo "$CONTEXT" | jq -r '.application.slug')
 _scope_slug=$(echo "$CONTEXT" | jq -r '.scope.slug')
@@ -10,6 +10,11 @@ _scope_slug=$(echo "$CONTEXT" | jq -r '.scope.slug')
 LAMBDA_FUNCTION_NAME="${SCOPE_ID}-${_application_slug}-${_scope_slug}"
 LAMBDA_FUNCTION_NAME="${LAMBDA_FUNCTION_NAME:0:64}"
 
+# Log group name follows the AWS Lambda convention, matching the Terraform
+# resource in deployment/compute/lambda/modules/locals.tf
+LAMBDA_LOG_GROUP_NAME="/aws/lambda/${LAMBDA_FUNCTION_NAME}"
+
 export LAMBDA_FUNCTION_NAME
+export LAMBDA_LOG_GROUP_NAME
 
 unset _application_slug _scope_slug
