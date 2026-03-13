@@ -40,7 +40,7 @@ result=$(aws logs filter-log-events \
    --end-time "$end_time" \
    --limit "$limit" \
    ${filter_arg} \
-   --query 'events[].{timestamp:timestamp,message:message}' \
+   --query 'events[].{datetime:timestamp,message:message}' \
    --output json 2>&1)
 
 if [ $? -ne 0 ]; then
@@ -56,7 +56,7 @@ if [ $? -ne 0 ]; then
    exit 1
 fi
 
-sorted_logs=$(echo "$result" | jq 'sort_by(.timestamp)')
+sorted_logs=$(echo "$result" | jq 'sort_by(.datetime)')
 
 jq -n \
    --argjson results "$sorted_logs" \
