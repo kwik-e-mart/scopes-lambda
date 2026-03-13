@@ -18,8 +18,10 @@ period="${METRIC_PERIOD:-300}"
 statistic="${METRIC_STATISTIC:-Sum}"
 
 # Calculate time range (default: last hour)
-end_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-start_time=$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '1 hour ago' +%Y-%m-%dT%H:%M:%SZ)
+_now=$(date +%s)
+end_time=$(date -u -d "@${_now}" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -r "${_now}" +%Y-%m-%dT%H:%M:%SZ)
+start_time=$(date -u -d "@$(( _now - 3600 ))" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -r "$(( _now - 3600 ))" +%Y-%m-%dT%H:%M:%SZ)
+unset _now
 
 echo "Fetching metric: $metric_name"
 echo "   Function: $LAMBDA_FUNCTION_NAME"
@@ -38,7 +40,7 @@ result=$(aws cloudwatch get-metric-statistics \
    --period "$period" \
    --statistics "$statistic" \
    --query 'Datapoints[*]' \
-   --output table 2>&1)
+   --output json 2>&1)
 
 if [ $? -ne 0 ]; then
    echo "❌ Failed to fetch metric '$metric_name' from CloudWatch" >&2
