@@ -1,0 +1,123 @@
+#!/bin/bash
+
+echo "🔍 Validating ALB configuration..."
+
+# Check visibility - ALB is only for private scopes
+visibility=$(echo "$CONTEXT" | jq -r '.scope.visibility // "public"')
+
+if [ "$visibility" != "private" ] && [ "$visibility" != "internal" ]; then
+  echo ""
+  echo "   ⏭️  Skipping ALB - visibility is '$visibility' (not private/internal)"
+  echo ""
+  return 0 2>/dev/null || exit 0
+fi
+
+echo "   ✅ visibility=$visibility"
+
+# Get ALB listener ARN from context or environment
+alb_listener_arn=$(echo "$CONTEXT" | jq -r '.providers["cloud-providers"].alb.listener_arn // empty')
+
+if [ -z "$alb_listener_arn" ] || [ "$alb_listener_arn" = "null" ]; then
+  # Try environment variable as fallback
+  alb_listener_arn="${ALB_LISTENER_ARN:-}"
+fi
+
+if [ -z "$alb_listener_arn" ]; then
+  echo ""
+  echo "   ❌ ALB listener ARN not found"
+  echo ""
+  echo "  💡 Possible causes:"
+  echo "    • ALB listener ARN not configured in cloud-provider"
+  echo "    • ALB_LISTENER_ARN environment variable not set"
+  echo ""
+  echo "  🔧 How to fix:"
+  echo "    • Configure alb.listener_arn in the cloud-provider settings"
+  echo "    • Or set ALB_LISTENER_ARN environment variable in Helm values"
+  echo ""
+  exit 1
+fi
+
+echo "   ✅ alb_listener_arn=$alb_listener_arn"
+
+# Extract scope information for naming
+scope_id=$(echo "$CONTEXT" | jq -r '.scope.id')
+scope_slug=$(echo "$CONTEXT" | jq -r '.scope.slug')
+application_slug=$(echo "$CONTEXT" | jq -r '.application.slug')
+namespace_slug=$(echo "$CONTEXT" | jq -r '.namespace.slug')
+
+# Target group name (max 32 chars for ALB)
+target_group_name="${namespace_slug:0:10}-${application_slug:0:10}-${scope_slug:0:8}"
+target_group_name="${target_group_name:0:32}"
+echo "   ✅ target_group_name=$target_group_name"
+
+# Host header for routing
+scope_domain=$(echo "$CONTEXT" | jq -r '.scope.domain // empty')
+if [ -z "$scope_domain" ] || [ "$scope_domain" = "null" ]; then
+  # Generate a default host header pattern
+  host_header="${application_slug}-${scope_slug}.internal"
+else
+  host_header="$scope_domain"
+fi
+echo "   ✅ host_header=$host_header"
+
+# Rule priority - get from context or use default
+rule_priority=$(echo "$CONTEXT" | jq -r '.scope.alb_rule_priority // empty')
+if [ -z "$rule_priority" ] || [ "$rule_priority" = "null" ]; then
+  rule_priority="${ALB_LISTENER_RULE_PRIORITY_START:-100}"
+fi
+echo "   ✅ rule_priority=$rule_priority"
+
+# Health check configuration
+health_check_path=$(echo "$CONTEXT" | jq -r '.scope.capabilities.health_check.path // "/health"')
+health_check_enabled="true"
+if [ "$health_check_path" = "" ] || [ "$health_check_path" = "null" ]; then
+  health_check_enabled="false"
+  health_check_path="/health"
+fi
+echo "   ✅ health_check_path=$health_check_path (enabled=$health_check_enabled)"
+
+# Get Lambda information from context
+lambda_function_name=$(echo "$CONTEXT" | jq -r '.lambda.function_name // empty')
+
+if [ -z "$lambda_function_name" ]; then
+  echo ""
+  echo "   ❌ Lambda function name not found in context"
+  echo ""
+  exit 1
+fi
+
+echo "   ✅ lambda_function_name=$lambda_function_name"
+
+RESOURCE_TAGS_JSON=${RESOURCE_TAGS_JSON:-"{}"}
+
+TOFU_VARIABLES=$(echo "$TOFU_VARIABLES" | jq \
+  --arg listener_arn "$alb_listener_arn" \
+  --arg target_group_name "$target_group_name" \
+  --arg host_header "$host_header" \
+  --argjson priority "$rule_priority" \
+  --arg health_check_path "$health_check_path" \
+  --argjson health_check_enabled "$health_check_enabled" \
+  --argjson resource_tags_json "$RESOURCE_TAGS_JSON" \
+  '. + {
+    alb_listener_arn: $listener_arn,
+    alb_target_group_name: $target_group_name,
+    alb_host_header: $host_header,
+    alb_rule_priority: $priority,
+    alb_health_check_path: $health_check_path,
+    alb_health_check_enabled: $health_check_enabled,
+    alb_resource_tags_json: $resource_tags_json
+  }')
+
+echo ""
+echo "✨ ALB configured successfully"
+echo ""
+
+# Add module to composition list
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+module_name="${script_dir}/modules"
+
+if [[ -n $MODULES_TO_USE ]]; then
+  MODULES_TO_USE="$MODULES_TO_USE,$module_name"
+else
+  MODULES_TO_USE="$module_name"
+fi

@@ -1,0 +1,14 @@
+#!/bin/bash
+# Cleanup NRN data during scope deletion
+# This removes all Lambda-related metadata from NRN
+
+echo "🔍 Cleaning up NRN metadata..."
+
+echo "   📋 scope_nrn=$SCOPE_NRN"
+
+# NRN data gets cleaned up automatically when the scope is deleted.
+# This script is a placeholder for any custom cleanup logic needed.
+
+echo "   ✅ NRN cleanup handled by platform (automatic on scope deletion)"
+echo ""
+echo "✨ NRN cleanup complete"

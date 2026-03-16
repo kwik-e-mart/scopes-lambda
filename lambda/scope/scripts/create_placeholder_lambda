@@ -1,0 +1,254 @@
+#!/bin/bash
+# Create a placeholder Lambda function during scope creation
+# This ensures the IAM role is available before first deployment
+
+echo "🔍 Creating placeholder Lambda function..."
+
+# Required environment variables
+if [ -z "${LAMBDA_FUNCTION_NAME:-}" ]; then
+  echo "❌ LAMBDA_FUNCTION_NAME is not set" >&2
+  echo "💡 Possible causes:" >&2
+  echo "   - build_context did not compute the function name" >&2
+  echo "   - Variable was not exported from a previous step" >&2
+  echo "🔧 How to fix:" >&2
+  echo "   - Ensure build_context runs before this script" >&2
+  echo "   - Check that LAMBDA_FUNCTION_NAME is exported" >&2
+  exit 1
+fi
+
+if [ -z "${LAMBDA_ROLE_ARN:-}" ]; then
+  echo "❌ LAMBDA_ROLE_ARN is not set" >&2
+  echo "💡 Possible causes:" >&2
+  echo "   - create_iam_role did not run or failed" >&2
+  echo "   - No execution role configured in cloud-provider context" >&2
+  echo "🔧 How to fix:" >&2
+  echo "   - Ensure create_iam_role runs before this script" >&2
+  echo "   - Check that LAMBDA_ROLE_ARN is exported" >&2
+  exit 1
+fi
+
+if [ -z "${OUTPUT_DIR:-}" ]; then
+  echo "❌ OUTPUT_DIR is not set" >&2
+  echo "💡 Possible causes:" >&2
+  echo "   - The scope runner did not set a working directory" >&2
+  echo "🔧 How to fix:" >&2
+  echo "   - Ensure OUTPUT_DIR is exported before running this script" >&2
+  exit 1
+fi
+
+echo "   📋 function_name=$LAMBDA_FUNCTION_NAME"
+echo "   📋 role_arn=$LAMBDA_ROLE_ARN"
+
+# Determine package type from capabilities or environment
+package_type="${PACKAGE_TYPE:-Zip}"
+runtime="${RUNTIME:-nodejs20.x}"
+handler="${HANDLER:-index.handler}"
+architecture="${ARCHITECTURE:-arm64}"
+
+echo "   📋 package_type=$package_type"
+echo "   📋 runtime=$runtime"
+echo "   📋 handler=$handler"
+echo "   📋 architecture=$architecture"
+
+# Check if function already exists
+echo ""
+echo "   📡 Checking if function already exists..."
+
+existing_function=$(aws lambda get-function \
+  --function-name "$LAMBDA_FUNCTION_NAME" \
+  2>&1 || echo "NOT_FOUND")
+
+if ! echo "$existing_function" | grep -q "ResourceNotFoundException\|NOT_FOUND"; then
+  echo "   ✅ Function already exists - skipping creation"
+
+  # Extract existing function ARN
+  LAMBDA_FUNCTION_ARN=$(echo "$existing_function" | jq -r '.Configuration.FunctionArn')
+  export LAMBDA_FUNCTION_ARN
+
+  echo "   📋 function_arn=$LAMBDA_FUNCTION_ARN"
+  exit 0
+fi
+
+# Skip placeholder creation for container image deployments
+# The actual function will be created at first deployment with the real image
+if [ "$package_type" = "Image" ]; then
+  echo ""
+  echo "   📝 Skipping placeholder creation for container image deployment"
+  echo "   📋 The Lambda function will be created at first deployment with the actual container image"
+
+  # Store function name mapping in NRN so deployment knows what to create
+  LAMBDA_FUNCTION_ARN=""
+  export LAMBDA_FUNCTION_ARN
+
+  echo ""
+  echo "✨ Placeholder skipped for container image scope: function_name=$LAMBDA_FUNCTION_NAME"
+  exit 0
+fi
+
+# Create placeholder code
+echo ""
+echo "   📝 Creating placeholder code..."
+
+placeholder_dir="$OUTPUT_DIR/placeholder"
+mkdir -p "$placeholder_dir"
+
+# Create simple placeholder handler based on runtime
+case "$runtime" in
+  nodejs*)
+    cat > "$placeholder_dir/index.js" << 'EOF'
+exports.handler = async (event) => {
+  return {
+    statusCode: 200,
+    body: JSON.stringify({
+      message: 'Placeholder Lambda - awaiting deployment',
+      timestamp: new Date().toISOString()
+    })
+  };
+};
+EOF
+    ;;
+  python*)
+    cat > "$placeholder_dir/lambda_function.py" << 'EOF'
+import json
+from datetime import datetime
+
+def lambda_handler(event, context):
+    return {
+        'statusCode': 200,
+        'body': json.dumps({
+            'message': 'Placeholder Lambda - awaiting deployment',
+            'timestamp': datetime.utcnow().isoformat()
+        })
+    }
+EOF
+    ;;
+  *)
+    # Default to Node.js
+    cat > "$placeholder_dir/index.js" << 'EOF'
+exports.handler = async (event) => {
+  return {
+    statusCode: 200,
+    body: JSON.stringify({
+      message: 'Placeholder Lambda - awaiting deployment',
+      timestamp: new Date().toISOString()
+    })
+  };
+};
+EOF
+    ;;
+esac
+
+# Create zip file
+zip_file="$OUTPUT_DIR/placeholder.zip"
+(cd "$placeholder_dir" && zip -q -r "$zip_file" .)
+
+echo "   ✅ Placeholder code created and packaged"
+
+# Create the Lambda function
+echo ""
+echo "   📡 Creating Lambda function..."
+
+# Build create command with tags
+tags_arg=""
+if [ -n "${RESOURCE_TAGS_JSON:-}" ]; then
+  # Convert JSON to AWS CLI format
+  tags_arg=$(echo "$RESOURCE_TAGS_JSON" | jq -r 'to_entries | map("\(.key)=\(.value)") | join(",")')
+fi
+
+create_output=$(aws lambda create-function \
+  --function-name "$LAMBDA_FUNCTION_NAME" \
+  --runtime "$runtime" \
+  --handler "$handler" \
+  --architectures "$architecture" \
+  --role "$LAMBDA_ROLE_ARN" \
+  --zip-file "fileb://$zip_file" \
+  --memory-size 128 \
+  --timeout 30 \
+  --description "Placeholder Lambda - created by nullplatform" \
+  ${tags_arg:+--tags "$tags_arg"} \
+  2>&1)
+create_exit_code=$?
+
+if [ $create_exit_code -ne 0 ]; then
+  # Check if it's a retriable error (role propagation)
+  if echo "$create_output" | grep -q "The role defined for the function cannot be assumed"; then
+    echo "   ⚠️ Waiting for IAM role propagation..."
+
+    max_retries=5
+    retry_delay=10
+
+    for i in $(seq 1 $max_retries); do
+      echo "   📝 Retry $i/$max_retries (waiting ${retry_delay}s)..."
+      sleep $retry_delay
+
+      create_output=$(aws lambda create-function \
+        --function-name "$LAMBDA_FUNCTION_NAME" \
+        --runtime "$runtime" \
+        --handler "$handler" \
+        --architectures "$architecture" \
+        --role "$LAMBDA_ROLE_ARN" \
+        --zip-file "fileb://$zip_file" \
+        --memory-size 128 \
+        --timeout 30 \
+        --description "Placeholder Lambda - created by nullplatform" \
+        ${tags_arg:+--tags "$tags_arg"} \
+        2>&1)
+      create_exit_code=$?
+
+      if [ $create_exit_code -eq 0 ]; then
+        break
+      fi
+
+      retry_delay=$((retry_delay + 10))
+    done
+  fi
+fi
+
+# Check final result
+if echo "$create_output" | grep -q "FunctionArn"; then
+  LAMBDA_FUNCTION_ARN=$(echo "$create_output" | jq -r '.FunctionArn')
+  echo "   ✅ Function created: function_arn=$LAMBDA_FUNCTION_ARN"
+else
+  echo "❌ Failed to create Lambda function '$LAMBDA_FUNCTION_NAME'" >&2
+  echo "💡 Possible causes:" >&2
+  echo "   - IAM role not yet propagated (even after retries)" >&2
+  echo "   - Insufficient permissions to create Lambda functions" >&2
+  echo "   - Invalid runtime '$runtime' or architecture '$architecture'" >&2
+  echo "   - Resource limits exceeded in this AWS region" >&2
+  echo "🔧 How to fix:" >&2
+  echo "   - Verify the agent has lambda:CreateFunction permission" >&2
+  echo "   - Check that role_arn=$LAMBDA_ROLE_ARN exists and is assumable by Lambda" >&2
+  echo "   - AWS error: $create_output" >&2
+
+  # Rollback: clean up temporary files
+  rm -rf "$placeholder_dir" "$zip_file"
+
+  echo "🔄 Rolling back: cleaning up resources..." >&2
+  # The caller should handle IAM role cleanup based on this exit code
+  # We only clean up resources created in this script
+  exit 1
+fi
+
+# Create main alias
+echo ""
+echo "   📝 Creating main alias..."
+
+alias_name="${LAMBDA_MAIN_ALIAS_NAME:-main}"
+
+alias_output=$(aws lambda create-alias \
+  --function-name "$LAMBDA_FUNCTION_NAME" \
+  --name "$alias_name" \
+  --function-version "\$LATEST" \
+  --description "Main alias for traffic routing" \
+  2>&1 || true)
+
+echo "   ✅ Alias '$alias_name' created for function $LAMBDA_FUNCTION_NAME"
+
+# Cleanup temporary files
+rm -rf "$placeholder_dir" "$zip_file"
+
+# Export function ARN
+export LAMBDA_FUNCTION_ARN
+
+echo ""
+echo "✨ Placeholder Lambda created: function_name=$LAMBDA_FUNCTION_NAME, function_arn=$LAMBDA_FUNCTION_ARN"

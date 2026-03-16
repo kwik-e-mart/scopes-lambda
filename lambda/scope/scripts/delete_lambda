@@ -1,0 +1,79 @@
+#!/bin/bash
+# Delete Lambda function during scope deletion
+# This removes the Lambda function and all versions/aliases
+
+echo "🔍 Deleting Lambda function..."
+
+# Get function name from NRN
+nrn_output=$(np nrn read --nrn "$SCOPE_NRN" --namespace aws --format json 2>&1 || echo "{}")
+function_name=$(echo "$nrn_output" | jq -r '.LAMBDA_FUNCTION_NAME // ""')
+
+if [ -z "$function_name" ] || [ "$function_name" = "null" ]; then
+  function_name="${LAMBDA_FUNCTION_NAME:-}"
+fi
+
+if [ -z "$function_name" ] || [ "$function_name" = "null" ]; then
+  echo "   ✅ No Lambda function name found in NRN or environment - skipping deletion"
+  exit 0
+fi
+
+echo "   📋 function_name=$function_name"
+
+# Check if function exists
+echo ""
+echo "   📡 Checking if function '$function_name' exists..."
+
+existing_function=$(aws lambda get-function \
+  --function-name "$function_name" \
+  2>&1 || echo "NOT_FOUND")
+
+if echo "$existing_function" | grep -q "ResourceNotFoundException\|NOT_FOUND"; then
+  echo "   ✅ Function '$function_name' does not exist - skipping deletion"
+  exit 0
+fi
+
+# Delete all aliases first
+echo ""
+echo "   📝 Deleting aliases for '$function_name'..."
+
+aliases=$(aws lambda list-aliases \
+  --function-name "$function_name" \
+  --query 'Aliases[].Name' \
+  --output text 2>/dev/null || echo "")
+
+if [ -n "$aliases" ]; then
+  for alias in $aliases; do
+    echo "   📝 Deleting alias: $alias"
+    aws lambda delete-alias \
+      --function-name "$function_name" \
+      --name "$alias" \
+      2>/dev/null || true
+  done
+else
+  echo "   ✅ No aliases found"
+fi
+
+# Delete the function (this also deletes all versions)
+echo ""
+echo "   📡 Deleting Lambda function '$function_name'..."
+
+delete_output=$(aws lambda delete-function \
+  --function-name "$function_name" \
+  2>&1)
+delete_exit_code=$?
+
+if [ $delete_exit_code -ne 0 ]; then
+  echo "❌ Failed to delete Lambda function '$function_name'" >&2
+  echo "💡 Possible causes:" >&2
+  echo "   - Function is being invoked or updated concurrently" >&2
+  echo "   - Insufficient Lambda permissions" >&2
+  echo "🔧 How to fix:" >&2
+  echo "   - Wait for ongoing operations to complete and retry" >&2
+  echo "   - Verify the agent has lambda:DeleteFunction permission" >&2
+  echo "   - AWS error: $delete_output" >&2
+  exit 1
+fi
+
+echo "   ✅ Lambda function '$function_name' deleted successfully"
+echo ""
+echo "✨ Lambda cleanup complete"

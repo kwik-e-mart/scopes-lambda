@@ -1,0 +1,97 @@
+#!/bin/bash
+
+echo "🔍 Validating API Gateway configuration..."
+
+# Check visibility - API Gateway is only for public scopes
+visibility=$(echo "$CONTEXT" | jq -r '.scope.visibility // "public"')
+
+if [ "$visibility" != "public" ]; then
+  echo ""
+  echo "   ⏭️  Skipping API Gateway - visibility is '$visibility' (not public)"
+  echo ""
+  return 0 2>/dev/null || exit 0
+fi
+
+echo "   ✅ visibility=public"
+
+# Extract scope information for naming
+scope_id=$(echo "$CONTEXT" | jq -r '.scope.id')
+scope_slug=$(echo "$CONTEXT" | jq -r '.scope.slug')
+application_slug=$(echo "$CONTEXT" | jq -r '.application.slug')
+namespace_slug=$(echo "$CONTEXT" | jq -r '.namespace.slug')
+
+# API Gateway name
+api_gateway_name="${namespace_slug}-${application_slug}-${scope_slug}"
+echo "   ✅ api_name=$api_gateway_name"
+
+# Stage name (default: main)
+stage_name="${API_GATEWAY_STAGE_NAME:-main}"
+echo "   ✅ stage_name=$stage_name"
+
+# Throttling settings
+throttling_burst_limit="${API_GATEWAY_THROTTLING_BURST_LIMIT:-5000}"
+throttling_rate_limit="${API_GATEWAY_THROTTLING_RATE_LIMIT:-10000}"
+echo "   ✅ throttling_burst_limit=$throttling_burst_limit"
+echo "   ✅ throttling_rate_limit=$throttling_rate_limit"
+
+# Check for custom domain configuration
+custom_domain=""
+certificate_arn=""
+
+# If DNS layer will generate the domain, we'll get it from locals
+# For now, check if there's a pre-configured custom domain
+if [ -n "${API_GATEWAY_CUSTOM_DOMAIN:-}" ]; then
+  custom_domain="$API_GATEWAY_CUSTOM_DOMAIN"
+  certificate_arn="${API_GATEWAY_CERTIFICATE_ARN:-}"
+  echo "   ✅ custom_domain=$custom_domain"
+fi
+
+# Get Lambda information from context (set by compute layer)
+# These will be available as terraform locals after compose_modules
+lambda_function_name=$(echo "$CONTEXT" | jq -r '.lambda.function_name // empty')
+
+if [ -z "$lambda_function_name" ]; then
+  echo ""
+  echo "   ❌ Lambda function name not found in context"
+  echo ""
+  echo "  💡 Possible causes:"
+  echo "    • The compute/lambda layer was not set up before this layer"
+  echo ""
+  exit 1
+fi
+
+echo "   ✅ lambda_function_name=$lambda_function_name"
+
+RESOURCE_TAGS_JSON=${RESOURCE_TAGS_JSON:-"{}"}
+
+TOFU_VARIABLES=$(echo "$TOFU_VARIABLES" | jq \
+  --arg api_name "$api_gateway_name" \
+  --arg stage_name "$stage_name" \
+  --argjson burst_limit "$throttling_burst_limit" \
+  --argjson rate_limit "$throttling_rate_limit" \
+  --arg custom_domain "$custom_domain" \
+  --arg certificate_arn "$certificate_arn" \
+  --argjson resource_tags_json "$RESOURCE_TAGS_JSON" \
+  '. + {
+    api_gateway_name: $api_name,
+    api_gateway_stage_name: $stage_name,
+    api_gateway_throttling_burst_limit: $burst_limit,
+    api_gateway_throttling_rate_limit: $rate_limit,
+    api_gateway_custom_domain: $custom_domain,
+    api_gateway_certificate_arn: $certificate_arn,
+    api_gateway_resource_tags_json: $resource_tags_json
+  }')
+
+echo ""
+echo "✨ API Gateway configured successfully"
+echo ""
+
+# Add module to composition list
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+module_name="${script_dir}/modules"
+
+if [[ -n $MODULES_TO_USE ]]; then
+  MODULES_TO_USE="$MODULES_TO_USE,$module_name"
+else
+  MODULES_TO_USE="$module_name"
+fi
